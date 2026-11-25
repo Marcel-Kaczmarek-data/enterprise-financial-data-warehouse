@@ -26,9 +26,9 @@ class BankAccountState:
     entity_id: str
     currency: str
     functional_currency: str
-    bank_balance: Decimal = ZERO          # account currency, bank view (value-dated)
-    gl_fc_balance: Decimal = ZERO         # account currency, GL view (posting-dated)
-    gl_functional: Decimal = ZERO         # functional currency, GL view
+    bank_balance: Decimal = ZERO  # account currency, bank view (value-dated)
+    gl_fc_balance: Decimal = ZERO  # account currency, GL view (posting-dated)
+    gl_functional: Decimal = ZERO  # functional currency, GL view
     opening_bank_balance: Decimal = ZERO
     txns: list[dict[str, Any]] = field(default_factory=list)
 
@@ -63,10 +63,16 @@ class Treasury:
                 ba_id = f"BA{n:03d}"
                 bank = BANKS[(n * 7) % len(BANKS)]
                 row = {
-                    "bank_account_id": ba_id, "entity_id": e.entity_id, "bank_name": bank,
+                    "bank_account_id": ba_id,
+                    "entity_id": e.entity_id,
+                    "bank_name": bank,
                     "account_number_masked": f"{e.country}** **** **** {1000 + n * 37:04d}",
-                    "currency": ccy, "account_purpose": purpose, "gl_account_id": 0,
-                    "opened_date": date(2015, 1, 1), "created_at": created, "updated_at": created,
+                    "currency": ccy,
+                    "account_purpose": purpose,
+                    "gl_account_id": 0,
+                    "opened_date": date(2015, 1, 1),
+                    "created_at": created,
+                    "updated_at": created,
                 }
                 rows.append(row)
                 self.accounts[ba_id] = BankAccountState(row, e.entity_id, ccy, fc)
@@ -88,17 +94,33 @@ class Treasury:
         return any(self.accounts[a].currency == currency for a in self.by_entity[entity_id])
 
     # ---------------------------------------------------------------------------------- bank feed
-    def bank_txn(self, ba_id: str, value_date: date, amount: Decimal, txn_type: str, reference: str | None,
-                 description: str, counterparty: str | None) -> dict[str, Any]:
+    def bank_txn(
+        self,
+        ba_id: str,
+        value_date: date,
+        amount: Decimal,
+        txn_type: str,
+        reference: str | None,
+        description: str,
+        counterparty: str | None,
+    ) -> dict[str, Any]:
         self._bank_seq += 1
         acc = self.accounts[ba_id]
         row = {
-            "bank_transaction_id": f"BT{self._bank_seq:09d}", "bank_account_id": ba_id,
-            "transaction_date": value_date, "value_date": value_date, "transaction_type": txn_type,
-            "currency": acc.currency, "amount": round_money(amount, acc.currency),
-            "bank_reference": reference, "description": description, "counterparty_name": counterparty,
-            "reconciliation_status": "BOOKED", "statement_id": f"{ba_id}-{value_date:%Y%m}",
-            "created_at": at(value_date, 22), "updated_at": at(value_date, 22),
+            "bank_transaction_id": f"BT{self._bank_seq:09d}",
+            "bank_account_id": ba_id,
+            "transaction_date": value_date,
+            "value_date": value_date,
+            "transaction_type": txn_type,
+            "currency": acc.currency,
+            "amount": round_money(amount, acc.currency),
+            "bank_reference": reference,
+            "description": description,
+            "counterparty_name": counterparty,
+            "reconciliation_status": "BOOKED",
+            "statement_id": f"{ba_id}-{value_date:%Y%m}",
+            "created_at": at(value_date, 22),
+            "updated_at": at(value_date, 22),
         }
         if value_date <= self.ctx.end:
             acc.txns.append(row)
@@ -144,41 +166,97 @@ class Treasury:
         rate = ctx.fx.spot(pay_date, currency, fc)
         net_cash = amount - bank_charge if direction == "INBOUND" else amount + bank_charge
         cash_functional = round_money(sign * net_cash * rate, fc)
-        lines = [Line("1010", sign * net_cash, currency, cash_functional, cost_center_id,
-                      account_variant=ba_id, description=f"{payment_type} {reference}")]
+        lines = [
+            Line(
+                "1010",
+                sign * net_cash,
+                currency,
+                cash_functional,
+                cost_center_id,
+                account_variant=ba_id,
+                description=f"{payment_type} {reference}",
+            )
+        ]
         if bank_charge:
-            lines.append(Line("6450", bank_charge, currency, round_money(bank_charge * rate, fc), cost_center_id,
-                              description="Bank charge deducted"))
+            lines.append(
+                Line(
+                    "6450",
+                    bank_charge,
+                    currency,
+                    round_money(bank_charge * rate, fc),
+                    cost_center_id,
+                    description="Bank charge deducted",
+                )
+            )
         lines += counter_lines
-        residual = -sum((ln.functional if ln.functional is not None else
-                         (ln.amount if ln.currency == fc else round_money(ln.amount * ctx.fx.spot(pay_date, ln.currency, fc), fc))
-                         for ln in lines), ZERO)
+        residual = -sum(
+            (
+                ln.functional
+                if ln.functional is not None
+                else (
+                    ln.amount
+                    if ln.currency == fc
+                    else round_money(ln.amount * ctx.fx.spot(pay_date, ln.currency, fc), fc)
+                )
+                for ln in lines
+            ),
+            ZERO,
+        )
         if residual != 0:
             # Realized FX difference between document (historical) value and settlement value.
-            lines.append(Line("8200", ZERO, fc, residual, ctx.org.cc(entity_id, "D18", "D17"),
-                              description="Realized FX gain/loss"))
+            lines.append(
+                Line(
+                    "8200", ZERO, fc, residual, ctx.org.cc(entity_id, "D18", "D17"), description="Realized FX gain/loss"
+                )
+            )
         journal_id = ctx.ledger.post(
-            entity_id, pay_date, journal_type or f"{payment_type}", lines,
-            source_document_type=source_document_type, source_document_id=str(payment_id),
-            reference_number=reference, description=description or f"{payment_type} {counterparty_name or ''}".strip(),
+            entity_id,
+            pay_date,
+            journal_type or f"{payment_type}",
+            lines,
+            source_document_type=source_document_type,
+            source_document_id=str(payment_id),
+            reference_number=reference,
+            description=description or f"{payment_type} {counterparty_name or ''}".strip(),
         )
         self._cash_gl(ba_id, sign * net_cash, cash_functional)
         payment = {
-            "payment_id": payment_id, "payment_number": reference, "payment_date": pay_date,
-            "entity_id": entity_id, "payment_direction": direction, "payment_type": payment_type,
-            "payment_method": method, "currency": currency, "payment_amount": round_money(amount, currency),
-            "functional_amount": round_money(amount * rate, fc), "bank_charge_amount": round_money(bank_charge, currency),
-            "payment_status": "COMPLETED", "bank_account_id": ba_id, "bank_reference": reference,
-            "counterparty_type": counterparty_type, "counterparty_id": counterparty_id, "journal_id": journal_id,
-            "created_at": at(pay_date, 11), "updated_at": at(pay_date, 11),
+            "payment_id": payment_id,
+            "payment_number": reference,
+            "payment_date": pay_date,
+            "entity_id": entity_id,
+            "payment_direction": direction,
+            "payment_type": payment_type,
+            "payment_method": method,
+            "currency": currency,
+            "payment_amount": round_money(amount, currency),
+            "functional_amount": round_money(amount * rate, fc),
+            "bank_charge_amount": round_money(bank_charge, currency),
+            "payment_status": "COMPLETED",
+            "bank_account_id": ba_id,
+            "bank_reference": reference,
+            "counterparty_type": counterparty_type,
+            "counterparty_id": counterparty_id,
+            "journal_id": journal_id,
+            "created_at": at(pay_date, 11),
+            "updated_at": at(pay_date, 11),
         }
         ctx.sink.emit("erp.payments", payment)
-        lag = bank_lag_days if bank_lag_days is not None else (
-            self.rng.choice([0, 1, 1, 2]) if direction == "INBOUND" else self.rng.choice([0, 0, 1]))
+        lag = (
+            bank_lag_days
+            if bank_lag_days is not None
+            else (self.rng.choice([0, 1, 1, 2]) if direction == "INBOUND" else self.rng.choice([0, 0, 1]))
+        )
         value_date = business_day(pay_date + timedelta(days=lag))
-        self.bank_txn(ba_id, value_date, sign * net_cash, payment_type,
-                      None if missing_bank_reference else reference,
-                      f"{payment_type} {counterparty_name or ''}".strip(), counterparty_name)
+        self.bank_txn(
+            ba_id,
+            value_date,
+            sign * net_cash,
+            payment_type,
+            None if missing_bank_reference else reference,
+            f"{payment_type} {counterparty_name or ''}".strip(),
+            counterparty_name,
+        )
         return payment
 
     def transfer(self, entity_id: str, d: date, from_ba: str, to_ba: str, amount_from: Decimal, purpose: str) -> None:
@@ -191,13 +269,23 @@ class Treasury:
         amount_to = round_money(amount_from * ctx.fx.spot(d, a.currency, b.currency), b.currency)
         f_in = round_money(amount_to * ctx.fx.spot(d, b.currency, fc), fc)
         cc = ctx.org.cc(entity_id, "D18", "D17")
-        lines = [Line("1010", -amount_from, a.currency, -f_out, cc, account_variant=from_ba, description=purpose),
-                 Line("1010", amount_to, b.currency, f_in, cc, account_variant=to_ba, description=purpose)]
+        lines = [
+            Line("1010", -amount_from, a.currency, -f_out, cc, account_variant=from_ba, description=purpose),
+            Line("1010", amount_to, b.currency, f_in, cc, account_variant=to_ba, description=purpose),
+        ]
         if f_in != f_out:
             lines.append(Line("8200", ZERO, fc, f_out - f_in, cc, description="FX conversion difference"))
         ref = f"TRF{ctx.ids.next('transfer'):08d}"
-        ctx.ledger.post(entity_id, d, "BANK_TRANSFER", lines, source_document_type="BANK_TRANSFER",
-                        source_document_id=ref, reference_number=ref, description=purpose)
+        ctx.ledger.post(
+            entity_id,
+            d,
+            "BANK_TRANSFER",
+            lines,
+            source_document_type="BANK_TRANSFER",
+            source_document_id=ref,
+            reference_number=ref,
+            description=purpose,
+        )
         self._cash_gl(from_ba, -amount_from, -f_out)
         self._cash_gl(to_ba, amount_to, f_in)
         self.bank_txn(from_ba, d, -amount_from, "INTERNAL_TRANSFER", ref, purpose, "Own account")
@@ -224,14 +312,17 @@ class Treasury:
         for ba_id in self.by_entity[entity_id]:
             acc = self.accounts[ba_id]
             # Monthly account fee (bank-originated, booked by accountant 1-4 days later).
-            fee = round_money(Decimal(self.rng.randint(15, 60)) * ctx.fx.spot(last_bd, "EUR", acc.currency), acc.currency)
+            fee = round_money(
+                Decimal(self.rng.randint(15, 60)) * ctx.fx.spot(last_bd, "EUR", acc.currency), acc.currency
+            )
             self._bank_originated(acc, ba_id, last_bd, -fee, "BANK_FEE", "6450", "Monthly account maintenance fee", cc)
             # Interest on positive balances (0.6% p.a.).
             if acc.gl_fc_balance > 0:
                 interest = round_money(acc.gl_fc_balance * Decimal("0.006") / 12, acc.currency)
                 if interest > 0:
-                    self._bank_originated(acc, ba_id, last_bd, interest, "INTEREST_CREDIT", "8000",
-                                          "Credit interest", cc)
+                    self._bank_originated(
+                        acc, ba_id, last_bd, interest, "INTEREST_CREDIT", "8000", "Credit interest", cc
+                    )
         # Sweep FX accounts above a buffer back to the operating account.
         op = self.account(entity_id, fc, "OPERATING")
         for ba_id in self.by_entity[entity_id]:
@@ -239,14 +330,26 @@ class Treasury:
             if acc.row["account_purpose"] == "FX":
                 buffer = round_money(Decimal(50000) * ctx.fx.spot(last_bd, "EUR", acc.currency), acc.currency)
                 if acc.gl_fc_balance > buffer * 3:
-                    self.transfer(entity_id, last_bd, ba_id, op, round_money(acc.gl_fc_balance - buffer, acc.currency),
-                                  f"FX sweep {acc.currency} to {fc}")
+                    self.transfer(
+                        entity_id,
+                        last_bd,
+                        ba_id,
+                        op,
+                        round_money(acc.gl_fc_balance - buffer, acc.currency),
+                        f"FX sweep {acc.currency} to {fc}",
+                    )
         # Collections account sweep to operating account.
         for ba_id in self.by_entity[entity_id]:
             acc = self.accounts[ba_id]
             if acc.row["account_purpose"] == "COLLECTIONS" and acc.gl_fc_balance > 0:
-                self.transfer(entity_id, last_bd, ba_id, op, round_money(acc.gl_fc_balance * Decimal("0.9"), fc),
-                              "Cash concentration sweep")
+                self.transfer(
+                    entity_id,
+                    last_bd,
+                    ba_id,
+                    op,
+                    round_money(acc.gl_fc_balance * Decimal("0.9"), fc),
+                    "Cash concentration sweep",
+                )
         # Payroll account funding happens in payroll module; FX revaluation of foreign-currency cash:
         for ba_id in self.by_entity[entity_id]:
             acc = self.accounts[ba_id]
@@ -256,29 +359,65 @@ class Treasury:
             target = round_money(acc.gl_fc_balance * closing, fc)
             adj = target - acc.gl_functional
             if adj != 0:
-                lines = [Line("1010", ZERO, acc.currency, adj, cc, account_variant=ba_id, rate=closing,
-                              description=f"Revaluation {acc.currency} cash at closing rate"),
-                         Line("8200", ZERO, fc, -adj, cc, description="Unrealized FX on cash")]
-                ctx.ledger.post(entity_id, m_end, "FX_REVALUATION", lines, source_document_type="FX_REVALUATION",
-                                source_document_id=f"{ba_id}-{period_of(m_end)}",
-                                reference_number=f"REVAL-{ba_id}-{m_end:%Y%m}",
-                                description="Month-end revaluation of foreign currency cash",
-                                created_at=at(m_end, 20))
+                lines = [
+                    Line(
+                        "1010",
+                        ZERO,
+                        acc.currency,
+                        adj,
+                        cc,
+                        account_variant=ba_id,
+                        rate=closing,
+                        description=f"Revaluation {acc.currency} cash at closing rate",
+                    ),
+                    Line("8200", ZERO, fc, -adj, cc, description="Unrealized FX on cash"),
+                ]
+                ctx.ledger.post(
+                    entity_id,
+                    m_end,
+                    "FX_REVALUATION",
+                    lines,
+                    source_document_type="FX_REVALUATION",
+                    source_document_id=f"{ba_id}-{period_of(m_end)}",
+                    reference_number=f"REVAL-{ba_id}-{m_end:%Y%m}",
+                    description="Month-end revaluation of foreign currency cash",
+                    created_at=at(m_end, 20),
+                )
                 acc.gl_functional += adj
 
-    def _bank_originated(self, acc: BankAccountState, ba_id: str, d: date, amount: Decimal, txn_type: str,
-                         counter_code: str, description: str, cc: str) -> None:
+    def _bank_originated(
+        self,
+        acc: BankAccountState,
+        ba_id: str,
+        d: date,
+        amount: Decimal,
+        txn_type: str,
+        counter_code: str,
+        description: str,
+        cc: str,
+    ) -> None:
         ctx = self.ctx
         fc = acc.functional_currency
         txn = self.bank_txn(ba_id, d, amount, txn_type, None, description, acc.row["bank_name"])
         created = at(business_day(d + timedelta(days=self.rng.randint(1, 4))), 10)
         posting = ctx.periods.resolve_posting_date(acc.entity_id, d, created)
         f = round_money(amount * ctx.fx.spot(posting, acc.currency, fc), fc)
-        lines = [Line("1010", amount, acc.currency, f, cc, account_variant=ba_id, description=description),
-                 Line(counter_code, -amount, acc.currency, -f, cc, description=description)]
-        ctx.ledger.post(acc.entity_id, posting, "BANK", lines, source_document_type="BANK_TRANSACTION",
-                        source_document_id=txn["bank_transaction_id"], reference_number=txn["bank_transaction_id"],
-                        description=description, created_at=created, transaction_date=d)
+        lines = [
+            Line("1010", amount, acc.currency, f, cc, account_variant=ba_id, description=description),
+            Line(counter_code, -amount, acc.currency, -f, cc, description=description),
+        ]
+        ctx.ledger.post(
+            acc.entity_id,
+            posting,
+            "BANK",
+            lines,
+            source_document_type="BANK_TRANSACTION",
+            source_document_id=txn["bank_transaction_id"],
+            reference_number=txn["bank_transaction_id"],
+            description=description,
+            created_at=created,
+            transaction_date=d,
+        )
         self._cash_gl(ba_id, amount, f)
 
     # ------------------------------------------------------------------------------------- output
@@ -305,10 +444,17 @@ class Treasury:
             while d <= ctx.end:
                 opening = balance
                 balance = opening + by_day.get(d, ZERO)
-                ctx.sink.emit("banking.account_balances", {
-                    "bank_account_id": ba_id, "balance_date": d, "currency": acc.currency,
-                    "opening_balance": opening, "closing_balance": balance,
-                    "statement_id": f"{ba_id}-{d:%Y%m}", "created_at": at(d, 23), "updated_at": at(d, 23),
-                })
+                ctx.sink.emit(
+                    "banking.account_balances",
+                    {
+                        "bank_account_id": ba_id,
+                        "balance_date": d,
+                        "currency": acc.currency,
+                        "opening_balance": opening,
+                        "closing_balance": balance,
+                        "statement_id": f"{ba_id}-{d:%Y%m}",
+                        "created_at": at(d, 23),
+                        "updated_at": at(d, 23),
+                    },
+                )
                 d += timedelta(days=1)
-

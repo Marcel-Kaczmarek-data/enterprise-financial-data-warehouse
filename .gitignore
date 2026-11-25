@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+pytest-cache-files-*/
 .coverage
 htmlcov/
 *.egg-info/
@@ -22,14 +23,15 @@ benchmarks/runs/
 dbt_finance/target/
 dbt_finance/dbt_packages/
 dbt_finance/logs/
-dbt_finance/profiles.yml
+
 logs/
 
 # Secrets - never commit
 .env
 *.pem
 *.key
-terraform.tfvars
+*.tfvars
+!*.tfvars.example
 *.tfstate
 *.tfstate.*
 .terraform/

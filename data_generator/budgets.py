@@ -34,7 +34,7 @@ def build_budgets(ctx: Any) -> None:
         actual[(eid, period, code, cc or ctx.org.cc(eid, "D17"))] += natural
     years = sorted({m.year for m in ctx.months})
     keys_by_year: dict[int, set[tuple[str, str, str]]] = defaultdict(set)
-    for (eid, period, code, cc) in actual:
+    for eid, period, code, cc in actual:
         keys_by_year[int(period[:4])].add((eid, code, cc))
     budget_no = 0
     for y in years:
@@ -64,13 +64,26 @@ def build_budgets(ctx: Any) -> None:
                 if amount == 0:
                     return
                 budget_no += 1
-                ctx.sink.emit("budgeting.budget_plans", {
-                    "budget_id": f"B{budget_no:09d}", "entity_id": eid, "fiscal_year": y,
-                    "fiscal_period": f"{y}-{m:02d}", "account_code": code, "department_id": dept,
-                    "cost_center_id": cc, "budget_version": version, "scenario": scenario,
-                    "budget_amount": amount, "currency": fc, "approval_status": status, "approved_at": approved,
-                    "created_at": approved - timedelta(days=20), "updated_at": approved,
-                })
+                ctx.sink.emit(
+                    "budgeting.budget_plans",
+                    {
+                        "budget_id": f"B{budget_no:09d}",
+                        "entity_id": eid,
+                        "fiscal_year": y,
+                        "fiscal_period": f"{y}-{m:02d}",
+                        "account_code": code,
+                        "department_id": dept,
+                        "cost_center_id": cc,
+                        "budget_version": version,
+                        "scenario": scenario,
+                        "budget_amount": amount,
+                        "currency": fc,
+                        "approval_status": status,
+                        "approved_at": approved,
+                        "created_at": approved - timedelta(days=20),
+                        "updated_at": approved,
+                    },
+                )
 
             for m in range(1, 13):
                 emit(m, "ORIGINAL", "BASE", orig[m], approved_orig)
@@ -85,15 +98,22 @@ def build_budgets(ctx: Any) -> None:
                 if add_months(month, -1) >= ctx.start and add_months(month, -1) <= ctx.end:
                     avg = sum(trailing, ZERO) / 3
                     prev_season = sum(Decimal(repr(SEASONALITY[(m - 1 - k) % 12])) for k in (1, 2, 3)) / 3
-                    fc_amt = round_money(avg * Decimal(repr(SEASONALITY[m - 1])) / prev_season, fc) if is_rev else \
-                        round_money(avg, fc)
+                    fc_amt = (
+                        round_money(avg * Decimal(repr(SEASONALITY[m - 1])) / prev_season, fc)
+                        if is_rev
+                        else round_money(avg, fc)
+                    )
                     emit(m, "FORECAST", "BASE", fc_amt, at(add_months(month, -1), 9), "SUBMITTED")
 
 
 def build_revenue_forecasts(ctx: Any) -> None:
     """Monthly weighted-pipeline snapshots from CRM opportunities (functional currency)."""
-    probability = {"PROSPECTING": Decimal("0.10"), "QUALIFICATION": Decimal("0.25"), "PROPOSAL": Decimal("0.50"),
-                   "NEGOTIATION": Decimal("0.75")}
+    probability = {
+        "PROSPECTING": Decimal("0.10"),
+        "QUALIFICATION": Decimal("0.25"),
+        "PROPOSAL": Decimal("0.50"),
+        "NEGOTIATION": Decimal("0.75"),
+    }
     by_entity: dict[str, list[tuple]] = defaultdict(list)
     for opp in ctx.opportunities:
         by_entity[opp[0]].append(opp)
@@ -105,14 +125,30 @@ def build_revenue_forecasts(ctx: Any) -> None:
             for _, created, closed, amount, ccy in opps:
                 if created <= m < closed:
                     age = (m - created).days / max(1, (closed - created).days)
-                    stage = "PROSPECTING" if age < 0.25 else "QUALIFICATION" if age < 0.5 else \
-                        "PROPOSAL" if age < 0.75 else "NEGOTIATION"
+                    stage = (
+                        "PROSPECTING"
+                        if age < 0.25
+                        else "QUALIFICATION"
+                        if age < 0.5
+                        else "PROPOSAL"
+                        if age < 0.75
+                        else "NEGOTIATION"
+                    )
                     amt = round_money(amount * ctx.fx.spot(m, ccy, fc), fc)
                     pipeline += amt
                     weighted += round_money(amt * probability[stage], fc)
             fid += 1
-            ctx.sink.emit("crm.revenue_forecasts", {
-                "forecast_id": fid, "entity_id": eid, "forecast_month": period_of(add_months(m, 1)),
-                "snapshot_date": m, "currency": fc, "pipeline_amount": pipeline, "weighted_amount": weighted,
-                "created_at": at(m, 6), "updated_at": at(m, 6),
-            })
+            ctx.sink.emit(
+                "crm.revenue_forecasts",
+                {
+                    "forecast_id": fid,
+                    "entity_id": eid,
+                    "forecast_month": period_of(add_months(m, 1)),
+                    "snapshot_date": m,
+                    "currency": fc,
+                    "pipeline_amount": pipeline,
+                    "weighted_amount": weighted,
+                    "created_at": at(m, 6),
+                    "updated_at": at(m, 6),
+                },
+            )

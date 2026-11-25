@@ -81,8 +81,9 @@ class Context:
         """Sales volume grows with commercial headcount plus a modest productivity gain."""
         from data_generator.invoices import PRODUCTIVITY_GROWTH
 
-        heads = sum(len(self.payroll.active(e.entity_id, month)) for e in self.entity_list
-                    if e.entity_type == "OPERATING")
+        heads = sum(
+            len(self.payroll.active(e.entity_id, month)) for e in self.entity_list if e.entity_type == "OPERATING"
+        )
         if not hasattr(self, "_initial_heads"):
             self._initial_heads = max(1, heads)
         years = (month - self.start).days / 365.25
@@ -92,28 +93,88 @@ class Context:
         emps = self.payroll.by_cc.get(cc)
         return rng.choice(emps).employee_id if emps else None
 
-    def tax_txn(self, eid: str, d: date, direction: str, doc_type: str, doc_id: int, taxable: Decimal,
-                rate: Decimal, tax: Decimal, ccy: str, functional: Decimal) -> None:
-        self.sink.emit("erp.tax_transactions", {
-            "tax_transaction_id": self.ids.next("tax"), "entity_id": eid, "tax_date": d, "tax_type": "VAT",
-            "tax_direction": direction, "source_document_type": doc_type, "source_document_id": doc_id,
-            "taxable_amount": taxable, "tax_rate_pct": rate, "tax_amount": tax, "currency": ccy,
-            "functional_tax_amount": functional, "created_at": at(d, 20), "updated_at": at(d, 20),
-        })
+    def tax_txn(
+        self,
+        eid: str,
+        d: date,
+        direction: str,
+        doc_type: str,
+        doc_id: int,
+        taxable: Decimal,
+        rate: Decimal,
+        tax: Decimal,
+        ccy: str,
+        functional: Decimal,
+    ) -> None:
+        self.sink.emit(
+            "erp.tax_transactions",
+            {
+                "tax_transaction_id": self.ids.next("tax"),
+                "entity_id": eid,
+                "tax_date": d,
+                "tax_type": "VAT",
+                "tax_direction": direction,
+                "source_document_type": doc_type,
+                "source_document_id": doc_id,
+                "taxable_amount": taxable,
+                "tax_rate_pct": rate,
+                "tax_amount": tax,
+                "currency": ccy,
+                "functional_tax_amount": functional,
+                "created_at": at(d, 20),
+                "updated_at": at(d, 20),
+            },
+        )
 
-    def crm_opportunity(self, opp_id: int, cust: Any, eid: str, name: str, amount: Decimal, ccy: str,
-                        created: date, close: date, won: bool) -> None:
-        base = {"opportunity_id": opp_id, "customer_id": cust.customer_id, "entity_id": eid, "opportunity_name": name,
-                "amount": amount, "currency": ccy, "expected_close_date": close}
-        self.sink.emit("crm.opportunities", dict(base, stage="PROSPECTING", probability_pct=Decimal(10),
-                                                 closed_date=None, is_won=None, created_at=at(created, 9),
-                                                 updated_at=at(created, 9)))
+    def crm_opportunity(
+        self,
+        opp_id: int,
+        cust: Any,
+        eid: str,
+        name: str,
+        amount: Decimal,
+        ccy: str,
+        created: date,
+        close: date,
+        won: bool,
+    ) -> None:
+        base = {
+            "opportunity_id": opp_id,
+            "customer_id": cust.customer_id,
+            "entity_id": eid,
+            "opportunity_name": name,
+            "amount": amount,
+            "currency": ccy,
+            "expected_close_date": close,
+        }
+        self.sink.emit(
+            "crm.opportunities",
+            dict(
+                base,
+                stage="PROSPECTING",
+                probability_pct=Decimal(10),
+                closed_date=None,
+                is_won=None,
+                created_at=at(created, 9),
+                updated_at=at(created, 9),
+            ),
+        )
         if close <= self.end:
-            self.sink.emit("crm.opportunities", dict(base, stage="CLOSED_WON" if won else "CLOSED_LOST",
-                                                     probability_pct=Decimal(100 if won else 0), closed_date=close,
-                                                     is_won=won, created_at=at(created, 9), updated_at=at(close, 17)))
-        self.opportunities.append((eid, created, close if close <= self.end else self.end + timedelta(days=1),
-                                   amount, ccy))
+            self.sink.emit(
+                "crm.opportunities",
+                dict(
+                    base,
+                    stage="CLOSED_WON" if won else "CLOSED_LOST",
+                    probability_pct=Decimal(100 if won else 0),
+                    closed_date=close,
+                    is_won=won,
+                    created_at=at(created, 9),
+                    updated_at=at(close, 17),
+                ),
+            )
+        self.opportunities.append(
+            (eid, created, close if close <= self.end else self.end + timedelta(days=1), amount, ccy)
+        )
 
 
 def fridays(month_start: date, month_end_: date) -> list[date]:
@@ -125,8 +186,13 @@ def fridays(month_start: date, month_end_: date) -> list[date]:
     return out
 
 
-def generate(profile_name: str, out_dir: Path | None = None, seed: int | None = None,
-             start: date | None = None, end: date | None = None) -> dict[str, Any]:
+def generate(
+    profile_name: str,
+    out_dir: Path | None = None,
+    seed: int | None = None,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict[str, Any]:
     cfg = local_config()["generator"]
     profile = cfg["profiles"][profile_name]
     seed = seed if seed is not None else int(cfg["seed"])
@@ -222,16 +288,33 @@ def generate(profile_name: str, out_dir: Path | None = None, seed: int | None = 
     counts = ctx.sink.close()
     elapsed = time.perf_counter() - t0
 
-    transactional = ["erp.customer_invoices", "erp.vendor_invoices", "erp.payments", "erp.credit_notes",
-                     "banking.bank_transactions", "payroll.payroll_transactions", "payroll.expense_claims",
-                     "erp.purchase_orders", "erp.goods_receipts", "crm.sales_orders"]
+    transactional = [
+        "erp.customer_invoices",
+        "erp.vendor_invoices",
+        "erp.payments",
+        "erp.credit_notes",
+        "banking.bank_transactions",
+        "payroll.payroll_transactions",
+        "payroll.expense_claims",
+        "erp.purchase_orders",
+        "erp.goods_receipts",
+        "crm.sales_orders",
+    ]
     manifest = {
-        "profile": profile_name, "seed": seed, "start_date": start.isoformat(), "end_date": end.isoformat(),
-        "generated_at": datetime.now(UTC).isoformat(), "elapsed_seconds": round(elapsed, 2),
-        "python": platform.python_version(), "machine": platform.machine(), "processor": platform.processor(),
-        "journals_posted": ctx.ledger.journal_count, "journal_lines": ctx.ledger.line_count,
+        "profile": profile_name,
+        "seed": seed,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "elapsed_seconds": round(elapsed, 2),
+        "python": platform.python_version(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+        "journals_posted": ctx.ledger.journal_count,
+        "journal_lines": ctx.ledger.line_count,
         "business_document_versions": sum(counts.get(t, 0) for t in transactional),
-        "local_accounts": len(ctx.coa.accounts), "row_counts": dict(sorted(counts.items())),
+        "local_accounts": len(ctx.coa.accounts),
+        "row_counts": dict(sorted(counts.items())),
         "price_scale": str(ctx.o2c.price_scale),
         "note": "Mutable source tables contain one row per version; counts are version counts.",
     }

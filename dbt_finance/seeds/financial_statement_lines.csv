@@ -1,0 +1,34 @@
+statement,statement_line,line_order,section,subsection,presentation_sign,is_current
+INCOME_STATEMENT,Product revenue,10,Revenue,Revenue,-1,
+INCOME_STATEMENT,Service revenue,20,Revenue,Revenue,-1,
+INCOME_STATEMENT,Other operating revenue,30,Revenue,Revenue,-1,
+INCOME_STATEMENT,Cost of goods sold,50,Cost of goods sold,Cost of goods sold,-1,
+INCOME_STATEMENT,Salaries and benefits,110,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Technology expenses,120,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Marketing expenses,130,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Rent and utilities,140,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Administrative expenses,150,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Travel expenses,160,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Professional services,170,Operating expenses,Operating expenses,-1,
+INCOME_STATEMENT,Depreciation and amortization,210,Depreciation and amortization,Depreciation and amortization,-1,
+INCOME_STATEMENT,Finance income,310,Financial items,Finance income,-1,
+INCOME_STATEMENT,Finance expenses,320,Financial items,Finance expenses,-1,
+INCOME_STATEMENT,Other non-operating items,330,Financial items,Other non-operating items,-1,
+INCOME_STATEMENT,Income tax expense,410,Income tax,Income tax,-1,
+BALANCE_SHEET,Cash and cash equivalents,10,Assets,Current assets,1,true
+BALANCE_SHEET,Accounts receivable,20,Assets,Current assets,1,true
+BALANCE_SHEET,Inventory,30,Assets,Current assets,1,true
+BALANCE_SHEET,Prepaid expenses,40,Assets,Current assets,1,true
+BALANCE_SHEET,Other current assets,50,Assets,Current assets,1,true
+BALANCE_SHEET,"Property, plant and equipment",60,Assets,Non-current assets,1,false
+BALANCE_SHEET,Accumulated depreciation,70,Assets,Non-current assets,1,false
+BALANCE_SHEET,Other non-current assets,80,Assets,Non-current assets,1,false
+BALANCE_SHEET,Accounts payable,110,Liabilities,Current liabilities,-1,true
+BALANCE_SHEET,Accrued expenses,120,Liabilities,Current liabilities,-1,true
+BALANCE_SHEET,Tax liabilities,130,Liabilities,Current liabilities,-1,true
+BALANCE_SHEET,Short-term debt,140,Liabilities,Current liabilities,-1,true
+BALANCE_SHEET,Long-term debt,150,Liabilities,Non-current liabilities,-1,false
+BALANCE_SHEET,Share capital,210,Equity,Equity,-1,
+BALANCE_SHEET,Retained earnings,220,Equity,Equity,-1,
+BALANCE_SHEET,Current-period earnings,230,Equity,Equity,-1,
+BALANCE_SHEET,Currency translation adjustments,240,Equity,Equity,-1,

@@ -1,0 +1,4 @@
+# Optional cloud environment (Snowflake). Not required for the local demonstration.
+# Version chosen to match dbt-core 1.12; verify against https://docs.getdbt.com before upgrading.
+-r requirements.txt
+dbt-snowflake>=1.11,<1.13

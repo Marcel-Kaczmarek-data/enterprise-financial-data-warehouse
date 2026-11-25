@@ -11,17 +11,19 @@ authors = [{ name = "Enterprise Financial Data Warehouse contributors" }]
 include = ["data_generator*", "ingestion*", "source_systems*", "warehouse*", "data_quality*", "dashboards*", "finance_common*"]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 extend-exclude = ["dbt_finance/target", "dbt_finance/dbt_packages", ".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "C4", "PTH", "DTZ"]
-ignore = ["RUF001", "RUF002", "RUF003", "PTH123", "B008"]
+ignore = ["RUF001", "RUF002", "RUF003", "PTH123", "B008", "SIM102", "SIM108", "SIM113", "PTH105", "E501"]  # E501: line length is owned by `ruff format`
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["DTZ"]
 "orchestration/**" = ["DTZ"]
+# emit() is a closure called inside the same loop iteration that defines it (no late binding).
+"data_generator/budgets.py" = ["B023"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -35,6 +37,7 @@ exclude = ["dbt_finance/", "orchestration/", ".venv/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+cache_dir = ".local/pytest_cache"
 markers = [
     "integration: requires local Docker services (PostgreSQL, MinIO) or a built warehouse",
     "financial: financial correctness tests against the built warehouse",

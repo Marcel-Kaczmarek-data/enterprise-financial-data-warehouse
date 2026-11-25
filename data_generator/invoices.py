@@ -84,9 +84,14 @@ class OrderToCash:
         if entity.entity_id not in self.customers_by_entity:
             return
         rng = rng_for(ctx.seed, "o2c", entity.entity_id, month_start.isoformat())
-        expected = invoices_per_month * entity.sales_weight / total_weight * SEASONALITY[month_start.month - 1] \
+        expected = (
+            invoices_per_month
+            * entity.sales_weight
+            / total_weight
+            * SEASONALITY[month_start.month - 1]
             * ctx.sales_growth_index(month_start)
-        n = max(0, round(rng.gauss(expected, max(1.0, expected ** 0.5))))
+        )
+        n = max(0, round(rng.gauss(expected, max(1.0, expected**0.5))))
         last_day = month_end(month_start)
         for _ in range(n):
             inv_date = month_start + timedelta(days=rng.randint(0, (last_day - month_start).days))
@@ -122,8 +127,14 @@ class OrderToCash:
             line = rng.choice(lines_available)
             prod = rng.choice(self.products_by_line[line])
             qty = Decimal(rng.randint(1, 8))
-            price = round_money(prod["list_price_eur"] * self.price_scale * Decimal(repr(cust.size_factor))
-                                * Decimal(repr(rng.uniform(0.9, 1.1))) * fx_to_ccy, ccy)
+            price = round_money(
+                prod["list_price_eur"]
+                * self.price_scale
+                * Decimal(repr(cust.size_factor))
+                * Decimal(repr(rng.uniform(0.9, 1.1)))
+                * fx_to_ccy,
+                ccy,
+            )
             net = round_money(qty * price, ccy)
             tax = round_money(net * tax_rate / 100, ccy)
             subtotal += net
@@ -140,28 +151,67 @@ class OrderToCash:
         opp_id = self.opportunity_seq
         opp_created = order_date - timedelta(days=rng.randint(20, 120))
         so_id = ctx.ids.next("sales_order")
-        ctx.crm_opportunity(opp_id, cust, eid, f"{cust.name.split(' ')[0]} {line_rows[0][1]['product_line']} deal",
-                            subtotal, ccy, opp_created, order_date, won=True)
-        ctx.sink.emit("crm.sales_orders", {
-            "sales_order_id": so_id, "order_number": f"SO{so_id:08d}", "customer_id": cust.customer_id,
-            "opportunity_id": opp_id, "entity_id": eid, "order_date": order_date, "delivery_date": None,
-            "currency": ccy, "order_amount": subtotal, "order_status": "CONFIRMED",
-            "created_at": at(order_date, 10), "updated_at": at(order_date, 10),
-        })
-        ctx.sink.emit("crm.sales_orders", {
-            "sales_order_id": so_id, "order_number": f"SO{so_id:08d}", "customer_id": cust.customer_id,
-            "opportunity_id": opp_id, "entity_id": eid, "order_date": order_date, "delivery_date": delivery_date,
-            "currency": ccy, "order_amount": subtotal, "order_status": "DELIVERED",
-            "created_at": at(order_date, 10), "updated_at": at(delivery_date, 12),
-        })
+        ctx.crm_opportunity(
+            opp_id,
+            cust,
+            eid,
+            f"{cust.name.split(' ')[0]} {line_rows[0][1]['product_line']} deal",
+            subtotal,
+            ccy,
+            opp_created,
+            order_date,
+            won=True,
+        )
+        ctx.sink.emit(
+            "crm.sales_orders",
+            {
+                "sales_order_id": so_id,
+                "order_number": f"SO{so_id:08d}",
+                "customer_id": cust.customer_id,
+                "opportunity_id": opp_id,
+                "entity_id": eid,
+                "order_date": order_date,
+                "delivery_date": None,
+                "currency": ccy,
+                "order_amount": subtotal,
+                "order_status": "CONFIRMED",
+                "created_at": at(order_date, 10),
+                "updated_at": at(order_date, 10),
+            },
+        )
+        ctx.sink.emit(
+            "crm.sales_orders",
+            {
+                "sales_order_id": so_id,
+                "order_number": f"SO{so_id:08d}",
+                "customer_id": cust.customer_id,
+                "opportunity_id": opp_id,
+                "entity_id": eid,
+                "order_date": order_date,
+                "delivery_date": delivery_date,
+                "currency": ccy,
+                "order_amount": subtotal,
+                "order_status": "DELIVERED",
+                "created_at": at(order_date, 10),
+                "updated_at": at(delivery_date, 12),
+            },
+        )
         # Lost / open opportunities around each won deal (pipeline realism).
         for _ in range(rng.choice([0, 1, 1, 2])):
             self.opportunity_seq += 1
             lost_created = opp_created + timedelta(days=rng.randint(-30, 30))
             close = lost_created + timedelta(days=rng.randint(30, 150))
-            ctx.crm_opportunity(self.opportunity_seq, cust, eid, f"{cust.name.split(' ')[0]} expansion",
-                                round_money(subtotal * Decimal(repr(rng.uniform(0.5, 2.0))), ccy), ccy,
-                                lost_created, close, won=False)
+            ctx.crm_opportunity(
+                self.opportunity_seq,
+                cust,
+                eid,
+                f"{cust.name.split(' ')[0]} expansion",
+                round_money(subtotal * Decimal(repr(rng.uniform(0.5, 2.0))), ccy),
+                ccy,
+                lost_created,
+                close,
+                won=False,
+            )
 
         # --- COGS at delivery (product lines)
         rate = ctx.fx.spot(inv_date, ccy, fc)
@@ -169,46 +219,99 @@ class OrderToCash:
             cogs_lines = []
             for net, ratio, pc in cogs:
                 amt = round_money(net * rate * ratio, fc)
-                cogs_lines += [Line("5000", amt, fc, None, sales_cc, pc, description="Cost of goods delivered"),
-                               Line("1200", -amt, fc, None, sales_cc, pc, description="Inventory issue")]
-            ctx.ledger.post(eid, delivery_date, "COGS", cogs_lines, source_document_type="SALES_ORDER",
-                            source_document_id=str(so_id), reference_number=f"SO{so_id:08d}",
-                            description="Goods delivery", source_system="ERP")
+                cogs_lines += [
+                    Line("5000", amt, fc, None, sales_cc, pc, description="Cost of goods delivered"),
+                    Line("1200", -amt, fc, None, sales_cc, pc, description="Inventory issue"),
+                ]
+            ctx.ledger.post(
+                eid,
+                delivery_date,
+                "COGS",
+                cogs_lines,
+                source_document_type="SALES_ORDER",
+                source_document_id=str(so_id),
+                reference_number=f"SO{so_id:08d}",
+                description="Goods delivery",
+                source_system="ERP",
+            )
             ctx.inventory_consumed[eid] += sum((ln.amount for ln in cogs_lines if ln.amount > 0), ZERO)
 
         # --- invoice + AR journal
         invoice_id = ctx.ids.next("invoice")
         number = f"INV-{eid}-{inv_date:%Y}-{invoice_id:08d}"
-        jl = [Line("1100", total, ccy, None, sales_cc, description=f"Invoice {number}")]
-        for group, var, net, tax, pc in revenue_split:
+        functional_total = round_money(total * rate, fc)
+        jl = [Line("1100", total, ccy, functional_total, sales_cc, description=f"Invoice {number}")]
+        for group, var, net, _tax, pc in revenue_split:
             jl.append(Line(group, -net, ccy, None, sales_cc, pc, account_variant=var, description="Revenue"))
         if tax_total:
             jl.append(Line("2200", -tax_total, ccy, None, sales_cc, description="Output VAT"))
         created = at(inv_date, 14, rng.randint(0, 59))
-        journal_id = ctx.ledger.post(eid, inv_date, "AR_INVOICE", jl, source_document_type="CUSTOMER_INVOICE",
-                                     source_document_id=str(invoice_id), reference_number=number,
-                                     description=f"Customer invoice {cust.name}", created_at=created)
-        functional_total = round_money(total * rate, fc)
+        journal_id = ctx.ledger.post(
+            eid,
+            inv_date,
+            "AR_INVOICE",
+            jl,
+            source_document_type="CUSTOMER_INVOICE",
+            source_document_id=str(invoice_id),
+            reference_number=number,
+            description=f"Customer invoice {cust.name}",
+            created_at=created,
+        )
         due = inv_date + timedelta(days=cust.payment_terms_days)
         inv = {
-            "invoice_id": invoice_id, "invoice_number": number, "erp_customer_id": cust.erp_customer_id,
-            "entity_id": eid, "sales_order_id": so_id, "invoice_date": inv_date, "due_date": due, "currency": ccy,
-            "subtotal": subtotal, "tax_amount": tax_total, "invoice_amount": total, "outstanding_amount": total,
-            "invoice_status": "OPEN", "is_intercompany": False, "counterparty_entity_id": None,
-            "journal_id": journal_id, "is_deleted": False, "created_at": created, "updated_at": created,
+            "invoice_id": invoice_id,
+            "invoice_number": number,
+            "erp_customer_id": cust.erp_customer_id,
+            "entity_id": eid,
+            "sales_order_id": so_id,
+            "invoice_date": inv_date,
+            "due_date": due,
+            "currency": ccy,
+            "subtotal": subtotal,
+            "tax_amount": tax_total,
+            "invoice_amount": total,
+            "outstanding_amount": total,
+            "invoice_status": "OPEN",
+            "is_intercompany": False,
+            "counterparty_entity_id": None,
+            "journal_id": journal_id,
+            "is_deleted": False,
+            "created_at": created,
+            "updated_at": created,
         }
         ctx.sink.emit("erp.customer_invoices", inv)
         for ln_no, prod, qty, price, net, tax, pc, group in line_rows:
-            ctx.sink.emit("erp.customer_invoice_lines", {
-                "invoice_line_id": ctx.ids.next("invoice_line"), "invoice_id": invoice_id, "line_number": ln_no,
-                "product_id": prod["product_id"], "quantity": qty, "unit_price": price, "line_amount": net,
-                "tax_rate_pct": tax_rate, "tax_amount": tax, "profit_center_id": pc,
-                "revenue_account_id": ctx.coa.account_for(eid, group, variant),
-                "created_at": created, "updated_at": created,
-            })
+            ctx.sink.emit(
+                "erp.customer_invoice_lines",
+                {
+                    "invoice_line_id": ctx.ids.next("invoice_line"),
+                    "invoice_id": invoice_id,
+                    "line_number": ln_no,
+                    "product_id": prod["product_id"],
+                    "quantity": qty,
+                    "unit_price": price,
+                    "line_amount": net,
+                    "tax_rate_pct": tax_rate,
+                    "tax_amount": tax,
+                    "profit_center_id": pc,
+                    "revenue_account_id": ctx.coa.account_for(eid, group, variant),
+                    "created_at": created,
+                    "updated_at": created,
+                },
+            )
         if tax_total:
-            ctx.tax_txn(eid, inv_date, "OUTPUT", "CUSTOMER_INVOICE", invoice_id, subtotal, tax_rate, tax_total, ccy,
-                        round_money(tax_total * rate, fc))
+            ctx.tax_txn(
+                eid,
+                inv_date,
+                "OUTPUT",
+                "CUSTOMER_INVOICE",
+                invoice_id,
+                subtotal,
+                tax_rate,
+                tax_total,
+                ccy,
+                round_money(tax_total * rate, fc),
+            )
         oi = OpenInvoice(inv, cust, total, functional_total, revenue_split, tax_rate)
         self.open[invoice_id] = oi
         self._schedule(oi, rng)
@@ -226,12 +329,19 @@ class OrderToCash:
         if never:
             self._push(inv_date + timedelta(days=400), "WRITE_OFF", inv["invoice_id"], None)
             return
-        offset = {"PROMPT": rng.randint(-10, 0), "NORMAL": rng.randint(-3, 15), "LATE": rng.randint(20, 95),
-                  "DELINQUENT": rng.randint(60, 220)}[b]
+        offset = {
+            "PROMPT": rng.randint(-10, 0),
+            "NORMAL": rng.randint(-3, 15),
+            "LATE": rng.randint(20, 95),
+            "DELINQUENT": rng.randint(60, 220),
+        }[b]
         pay = max(inv_date + timedelta(days=1), due + timedelta(days=offset))
         if cust.batch_payer:
-            pay = date(pay.year, pay.month, min(25, 28)) if pay.day <= 25 else (
-                date(pay.year + (pay.month == 12), pay.month % 12 + 1, 25))
+            pay = (
+                date(pay.year, pay.month, min(25, 28))
+                if pay.day <= 25
+                else (date(pay.year + (pay.month == 12), pay.month % 12 + 1, 25))
+            )
             pay = max(pay, inv_date + timedelta(days=1))
         pay = business_day(pay)
         if rng.random() < 0.08:  # partial settlement in two installments
@@ -297,31 +407,58 @@ class OrderToCash:
         counter, reliefs = [], []
         cc = ctx.org.cc(eid, "D17")
         for oi, amt in allocations:
-            relief = oi.remaining_functional if amt == oi.remaining else round_money(
-                oi.remaining_functional * amt / oi.remaining, fc)
+            relief = (
+                oi.remaining_functional
+                if amt == oi.remaining
+                else round_money(oi.remaining_functional * amt / oi.remaining, fc)
+            )
             counter.append(Line("1100", -amt, ccy, -relief, cc, description=f"Settle {oi.invoice['invoice_number']}"))
             reliefs.append(relief)
         payment = ctx.treasury.pay(
-            eid, pay_date, "INBOUND", "CUSTOMER_RECEIPT", ccy, total, counter, ba_id=ba,
-            counterparty_type="CUSTOMER", counterparty_id=str(oi0.customer.erp_customer_id),
-            counterparty_name=oi0.customer.name, bank_charge=charge, cost_center_id=cc,
-            missing_bank_reference=rng.random() < 0.04, journal_type="AR_RECEIPT",
+            eid,
+            pay_date,
+            "INBOUND",
+            "CUSTOMER_RECEIPT",
+            ccy,
+            total,
+            counter,
+            ba_id=ba,
+            counterparty_type="CUSTOMER",
+            counterparty_id=str(oi0.customer.erp_customer_id),
+            counterparty_name=oi0.customer.name,
+            bank_charge=charge,
+            cost_center_id=cc,
+            missing_bank_reference=rng.random() < 0.04,
+            journal_type="AR_RECEIPT",
         )
         for (oi, amt), relief in zip(allocations, reliefs, strict=True):
-            ctx.sink.emit("erp.payment_allocations", {
-                "allocation_id": ctx.ids.next("allocation"), "payment_id": payment["payment_id"],
-                "document_type": "CUSTOMER_INVOICE", "document_id": oi.invoice["invoice_id"],
-                "allocation_date": pay_date, "currency": ccy, "allocated_amount": amt, "discount_amount": ZERO,
-                "functional_amount_relieved": relief, "created_at": payment["created_at"],
-                "updated_at": payment["created_at"],
-            })
+            ctx.sink.emit(
+                "erp.payment_allocations",
+                {
+                    "allocation_id": ctx.ids.next("allocation"),
+                    "payment_id": payment["payment_id"],
+                    "document_type": "CUSTOMER_INVOICE",
+                    "document_id": oi.invoice["invoice_id"],
+                    "allocation_date": pay_date,
+                    "currency": ccy,
+                    "allocated_amount": amt,
+                    "discount_amount": ZERO,
+                    "functional_amount_relieved": relief,
+                    "created_at": payment["created_at"],
+                    "updated_at": payment["created_at"],
+                },
+            )
             oi.remaining -= amt
             oi.remaining_functional -= relief
             self._version(oi, pay_date, "PAID" if oi.remaining == 0 else "PARTIALLY_PAID")
 
     def _version(self, oi: OpenInvoice, d: date, status: str) -> None:
-        oi.invoice = dict(oi.invoice, outstanding_amount=oi.remaining, invoice_status=status,
-                          updated_at=at(d, 18, int(oi.invoice["invoice_id"]) % 60))
+        oi.invoice = dict(
+            oi.invoice,
+            outstanding_amount=oi.remaining,
+            invoice_status=status,
+            updated_at=at(d, 18, int(oi.invoice["invoice_id"]) % 60),
+        )
         self.ctx.sink.emit("erp.customer_invoices", oi.invoice)
 
     def _credit_note(self, oi: OpenInvoice, d: date, frac: Decimal) -> None:
@@ -346,27 +483,72 @@ class OrderToCash:
         rev_f_total = functional - round_money(tax * inv_rate, fc)
         acc_f = ZERO
         for i, (group, var, net, _tax, pc) in enumerate(oi.revenue_split):
-            part = rev_f_total - acc_f if i == len(oi.revenue_split) - 1 else round_money(rev_f_total * net / net_total, fc)
+            part = (
+                rev_f_total - acc_f
+                if i == len(oi.revenue_split) - 1
+                else round_money(rev_f_total * net / net_total, fc)
+            )
             acc_f += part
-            lines.append(Line(group, round_money(subtotal * net / net_total, ccy), ccy, part, cc, pc,
-                              account_variant=var, description="Revenue reversal"))
+            lines.append(
+                Line(
+                    group,
+                    round_money(subtotal * net / net_total, ccy),
+                    ccy,
+                    part,
+                    cc,
+                    pc,
+                    account_variant=var,
+                    description="Revenue reversal",
+                )
+            )
         if tax:
             lines.append(Line("2200", tax, ccy, round_money(tax * inv_rate, fc), cc, description="Output VAT reversal"))
         created = at(d, 11)
         posting = ctx.periods.resolve_posting_date(eid, d, created)
-        journal_id = ctx.ledger.post(eid, posting, "AR_CREDIT_NOTE", lines, source_document_type="CREDIT_NOTE",
-                                     source_document_id=str(cn_id), reference_number=number,
-                                     description="Customer credit note", created_at=created)
-        ctx.sink.emit("erp.credit_notes", {
-            "credit_note_id": cn_id, "credit_note_number": number, "invoice_id": inv["invoice_id"],
-            "erp_customer_id": inv["erp_customer_id"], "entity_id": eid, "credit_note_date": posting,
-            "currency": ccy, "subtotal": subtotal, "tax_amount": tax, "credit_amount": total,
-            "functional_amount": functional, "reason_code": "FULL_CREDIT" if frac == 1 else "PRICE_ADJUSTMENT",
-            "journal_id": journal_id, "created_at": created, "updated_at": created,
-        })
+        journal_id = ctx.ledger.post(
+            eid,
+            posting,
+            "AR_CREDIT_NOTE",
+            lines,
+            source_document_type="CREDIT_NOTE",
+            source_document_id=str(cn_id),
+            reference_number=number,
+            description="Customer credit note",
+            created_at=created,
+        )
+        ctx.sink.emit(
+            "erp.credit_notes",
+            {
+                "credit_note_id": cn_id,
+                "credit_note_number": number,
+                "invoice_id": inv["invoice_id"],
+                "erp_customer_id": inv["erp_customer_id"],
+                "entity_id": eid,
+                "credit_note_date": posting,
+                "currency": ccy,
+                "subtotal": subtotal,
+                "tax_amount": tax,
+                "credit_amount": total,
+                "functional_amount": functional,
+                "reason_code": "FULL_CREDIT" if frac == 1 else "PRICE_ADJUSTMENT",
+                "journal_id": journal_id,
+                "created_at": created,
+                "updated_at": created,
+            },
+        )
         if tax:
-            ctx.tax_txn(eid, posting, "OUTPUT", "CREDIT_NOTE", cn_id, -subtotal, oi.tax_rate, -tax, ccy,
-                        -round_money(tax * inv_rate, fc))
+            ctx.tax_txn(
+                eid,
+                posting,
+                "OUTPUT",
+                "CREDIT_NOTE",
+                cn_id,
+                -subtotal,
+                oi.tax_rate,
+                -tax,
+                ccy,
+                -round_money(tax * inv_rate, fc),
+            )
         oi.remaining -= total
         oi.remaining_functional -= functional
         if oi.remaining < 0:
@@ -384,18 +566,35 @@ class OrderToCash:
         cc = ctx.org.cc(eid, "D17")
         ctx.treasury.ensure_funds(eid, d, ccy, amt)
         payment = ctx.treasury.pay(
-            eid, d, "OUTBOUND", "CUSTOMER_REFUND", ccy, amt,
+            eid,
+            d,
+            "OUTBOUND",
+            "CUSTOMER_REFUND",
+            ccy,
+            amt,
             [Line("1100", amt, ccy, -oi.remaining_functional, cc, description="Customer refund")],
-            counterparty_type="CUSTOMER", counterparty_id=str(inv["erp_customer_id"]),
-            counterparty_name=oi.customer.name, cost_center_id=cc, journal_type="AR_REFUND",
+            counterparty_type="CUSTOMER",
+            counterparty_id=str(inv["erp_customer_id"]),
+            counterparty_name=oi.customer.name,
+            cost_center_id=cc,
+            journal_type="AR_REFUND",
         )
-        ctx.sink.emit("erp.payment_allocations", {
-            "allocation_id": ctx.ids.next("allocation"), "payment_id": payment["payment_id"],
-            "document_type": "CREDIT_NOTE", "document_id": cn_id, "allocation_date": d, "currency": ccy,
-            "allocated_amount": -amt, "discount_amount": ZERO,
-            "functional_amount_relieved": oi.remaining_functional,
-            "created_at": payment["created_at"], "updated_at": payment["created_at"],
-        })
+        ctx.sink.emit(
+            "erp.payment_allocations",
+            {
+                "allocation_id": ctx.ids.next("allocation"),
+                "payment_id": payment["payment_id"],
+                "document_type": "CREDIT_NOTE",
+                "document_id": cn_id,
+                "allocation_date": d,
+                "currency": ccy,
+                "allocated_amount": -amt,
+                "discount_amount": ZERO,
+                "functional_amount_relieved": oi.remaining_functional,
+                "created_at": payment["created_at"],
+                "updated_at": payment["created_at"],
+            },
+        )
         oi.remaining = ZERO
         oi.remaining_functional = ZERO
         self._version(oi, d, "CREDITED")
@@ -411,18 +610,41 @@ class OrderToCash:
         number = f"WO-{eid}-{d:%Y}-{cn_id:07d}"
         created = at(d, 16)
         posting = ctx.periods.resolve_posting_date(eid, d, created)
-        lines = [Line("6420", oi.remaining, ccy, oi.remaining_functional, cc, description="Bad debt write-off"),
-                 Line("1100", -oi.remaining, ccy, -oi.remaining_functional, cc, description=f"Write-off {number}")]
-        jid = ctx.ledger.post(eid, posting, "AR_WRITE_OFF", lines, source_document_type="CREDIT_NOTE",
-                              source_document_id=str(cn_id), reference_number=number,
-                              description="Bad debt write-off", created_at=created)
-        ctx.sink.emit("erp.credit_notes", {
-            "credit_note_id": cn_id, "credit_note_number": number, "invoice_id": inv["invoice_id"],
-            "erp_customer_id": inv["erp_customer_id"], "entity_id": eid, "credit_note_date": posting,
-            "currency": ccy, "subtotal": oi.remaining, "tax_amount": ZERO, "credit_amount": oi.remaining,
-            "functional_amount": oi.remaining_functional, "reason_code": "BAD_DEBT_WRITE_OFF", "journal_id": jid,
-            "created_at": created, "updated_at": created,
-        })
+        lines = [
+            Line("6420", oi.remaining, ccy, oi.remaining_functional, cc, description="Bad debt write-off"),
+            Line("1100", -oi.remaining, ccy, -oi.remaining_functional, cc, description=f"Write-off {number}"),
+        ]
+        jid = ctx.ledger.post(
+            eid,
+            posting,
+            "AR_WRITE_OFF",
+            lines,
+            source_document_type="CREDIT_NOTE",
+            source_document_id=str(cn_id),
+            reference_number=number,
+            description="Bad debt write-off",
+            created_at=created,
+        )
+        ctx.sink.emit(
+            "erp.credit_notes",
+            {
+                "credit_note_id": cn_id,
+                "credit_note_number": number,
+                "invoice_id": inv["invoice_id"],
+                "erp_customer_id": inv["erp_customer_id"],
+                "entity_id": eid,
+                "credit_note_date": posting,
+                "currency": ccy,
+                "subtotal": oi.remaining,
+                "tax_amount": ZERO,
+                "credit_amount": oi.remaining,
+                "functional_amount": oi.remaining_functional,
+                "reason_code": "BAD_DEBT_WRITE_OFF",
+                "journal_id": jid,
+                "created_at": created,
+                "updated_at": created,
+            },
+        )
         oi.remaining = ZERO
         oi.remaining_functional = ZERO
         self._version(oi, posting, "WRITTEN_OFF")

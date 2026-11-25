@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: int_account_mapping
+    description: Local posting account to group account mapping with statement attributes.
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: group_account_code
+        description: A NULL here is a missing account mapping and blocks publication.
+        data_tests: [{ not_null: { config: { severity: error, tags: [critical] } } }]
+
+  - name: int_general_ledger_enriched
+    columns:
+      - name: functional_to_reporting_rate
+        description: NULL means a missing exchange rate - never defaulted to 1.
+        data_tests: [{ not_null: { config: { severity: error, tags: [critical] } } }]
+
+  - name: int_fx_rates_daily
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [date_day, currency] } }
+
+  - name: int_translated_trial_balance
+    description: Standalone trial balances translated to EUR including CTA.
+    data_tests:
+      - sums_to_zero:
+          arguments: { column_name: closing_balance_reporting, group_by: [entity_id, fiscal_period], tolerance: 0.01 }
+          config: { severity: error, tags: [critical] }
+
+  - name: int_intercompany_eliminations
+    description: Consolidation eliminations stored separately from standalone ledgers.
+    data_tests:
+      - sums_to_zero:
+          arguments: { column_name: amount_reporting, group_by: [elimination_id] }
+          config: { severity: error, tags: [critical] }
+
+  - name: int_cash_flow_classification
+    columns:
+      - name: cash_flow_section
+        data_tests:
+          - accepted_values:
+              arguments: { values: [OPERATING, INVESTING, FINANCING, INTERNAL_TRANSFER, FX_EFFECT] }
+              config: { severity: error, tags: [critical] }
+              description: Every cash movement must be classified.
+
+  - name: int_bank_transaction_matching
+    columns:
+      - name: reconciliation_item_id
+        data_tests: [unique, not_null]
+      - name: match_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [MATCHED, OUTSTANDING_IN_TRANSIT, OUTSTANDING_NOT_YET_BOOKED, AMBIGUOUS_REVIEW,
+                         POSSIBLE_DUPLICATE, UNMATCHED_LEDGER, UNMATCHED_BANK]
+
+  - name: int_subledger_reconciliation
+    description: AR/AP subledger vs GL control accounts at every month end.
+    data_tests:
+      - expression_is_true:
+          arguments: { expression: "abs(difference) <= 0.01" }
+          config: { severity: warn, tags: [reconciliation] }
+          description: Differences are surfaced (warn) and routed to mart_financial_exceptions.

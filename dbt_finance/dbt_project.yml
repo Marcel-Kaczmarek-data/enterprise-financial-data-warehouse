@@ -1,0 +1,68 @@
+name: finance
+version: "1.0.0"
+config-version: 2
+profile: finance
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+target-path: target
+clean-targets: [target, dbt_packages, logs]
+
+vars:
+  group_reporting_currency: EUR
+  financial_rule_version: "2025.1"
+  # Bank reconciliation tolerances (see config/financial-rules.yaml)
+  bank_match_date_tolerance_days: 5   # calendar days (= 3 business days incl. a weekend)
+  reconciliation_tolerance: 0.01
+  intercompany_tolerance_pct: 2.0    # each side translated at its own average rate
+  three_way_price_tolerance_pct: 2.0
+  # Incremental lookback for late-arriving / back-dated GL postings
+  gl_incremental_lookback_days: 45
+
+models:
+  finance:
+    +persist_docs: { relation: true, columns: true }
+    staging:
+      +schema: finance_staging
+      +materialized: view
+      +tags: [staging]
+    intermediate:
+      +schema: finance_intermediate
+      +materialized: table
+      +tags: [intermediate]
+    core:
+      +schema: finance_core
+      +materialized: table
+      +tags: [core]
+    marts:
+      +schema: finance_marts
+      +materialized: table
+      +tags: [marts]
+    audit:
+      +schema: finance_audit
+      +materialized: table
+      +tags: [audit]
+
+seeds:
+  finance:
+    +schema: finance_core
+    group_chart_of_accounts:
+      +column_types: { group_account_code: varchar, parent_group_account_code: varchar, is_posting_account: boolean }
+    financial_statement_lines:
+      +column_types: { is_current: boolean }
+
+snapshots:
+  finance:
+    +target_schema: finance_snapshots
+
+data_tests:
+  finance:
+    +store_failures: true
+    +schema: finance_test_failures
+
+on-run-end:
+  - "{{ log_dbt_results(results) }}"

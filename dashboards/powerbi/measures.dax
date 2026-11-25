@@ -1,0 +1,70 @@
+// Power BI measures for the finance semantic model (specification - not validated in Power BI).
+// Table names match the dbt marts. Amount columns are in the reporting currency (EUR).
+
+// ---------- Profit and loss (flow measures: additive over periods) ----------
+Revenue :=
+CALCULATE ( SUM ( mart_profit_and_loss[amount_reporting] ),
+    mart_profit_and_loss[statement_line] = "Total revenue",
+    mart_profit_and_loss[reporting_scope] = "CONSOLIDATED" )
+
+Gross Profit :=
+CALCULATE ( SUM ( mart_profit_and_loss[amount_reporting] ),
+    mart_profit_and_loss[statement_line] = "Gross profit",
+    mart_profit_and_loss[reporting_scope] = "CONSOLIDATED" )
+
+EBITDA :=
+CALCULATE ( SUM ( mart_profit_and_loss[amount_reporting] ),
+    mart_profit_and_loss[statement_line] = "EBITDA",
+    mart_profit_and_loss[reporting_scope] = "CONSOLIDATED" )
+
+Net Profit :=
+CALCULATE ( SUM ( mart_profit_and_loss[amount_reporting] ),
+    mart_profit_and_loss[statement_line] = "Net profit",
+    mart_profit_and_loss[reporting_scope] = "CONSOLIDATED" )
+
+Gross Margin % := DIVIDE ( [Gross Profit], [Revenue] )
+EBITDA Margin % := DIVIDE ( [EBITDA], [Revenue] )
+
+Revenue YTD := TOTALYTD ( [Revenue], dim_fiscal_period[period_end] )
+Revenue PY := CALCULATE ( [Revenue], SAMEPERIODLASTYEAR ( dim_fiscal_period[period_end] ) )
+Revenue YoY % := DIVIDE ( [Revenue] - [Revenue PY], [Revenue PY] )
+
+// ---------- Balance sheet (point-in-time: last period in context, never summed) ----------
+Last Period := LASTNONBLANK ( dim_fiscal_period[fiscal_period], CALCULATE ( COUNTROWS ( mart_balance_sheet ) ) )
+
+Balance (EUR) :=
+CALCULATE ( SUM ( mart_balance_sheet[amount_reporting] ),
+    mart_balance_sheet[reporting_scope] = "CONSOLIDATED",
+    KEEPFILTERS ( [Last Period] ) )
+
+Cash :=
+CALCULATE ( [Balance (EUR)], mart_balance_sheet[statement_line] = "Cash and cash equivalents" )
+
+Receivables :=
+CALCULATE ( [Balance (EUR)], mart_balance_sheet[statement_line] = "Accounts receivable" )
+
+Payables :=
+CALCULATE ( [Balance (EUR)], mart_balance_sheet[statement_line] = "Accounts payable" )
+
+Current Ratio :=
+DIVIDE (
+    CALCULATE ( [Balance (EUR)], mart_balance_sheet[subsection] = "Current assets" ),
+    CALCULATE ( [Balance (EUR)], mart_balance_sheet[subsection] = "Current liabilities" ) )
+
+// ---------- Working capital ----------
+Revenue Trailing 3M :=
+CALCULATE ( [Revenue], DATESINPERIOD ( dim_fiscal_period[period_end], MAX ( dim_fiscal_period[period_end] ), -3, MONTH ) )
+
+DSO (days) := DIVIDE ( [Receivables], [Revenue Trailing 3M] ) * 91
+
+Overdue Receivables :=
+CALCULATE ( SUM ( fact_receivables_snapshot[outstanding_amount_reporting] ),
+    fact_receivables_snapshot[is_overdue] = TRUE (),
+    KEEPFILTERS ( LASTDATE ( fact_receivables_snapshot[snapshot_date] ) ) )
+
+// ---------- Budget ----------
+Actual vs Budget :=
+SUM ( mart_budget_vs_actual[actual_amount_reporting] ) - SUM ( mart_budget_vs_actual[budget_amount_reporting] )
+
+Budget Variance % :=
+DIVIDE ( [Actual vs Budget], SUM ( mart_budget_vs_actual[budget_amount_reporting] ) )

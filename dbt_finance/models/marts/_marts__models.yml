@@ -1,0 +1,145 @@
+version: 2
+
+models:
+  - name: mart_profit_and_loss
+    description: >
+      Profit and loss statement per reporting scope (STANDALONE entity / CONSOLIDATED group), period
+      and statement line including subtotals (gross profit, EBITDA, EBIT, PBT, net profit), with YTD,
+      prior month and prior year. Presentation sign: income positive, costs negative.
+    meta: { owner: Group Financial Reporting, grain: reporting_scope x entity_id x fiscal_period x statement_line,
+            freshness: daily after the ERP load, lineage: fact_monthly_account_balances + int_intercompany_eliminations }
+    data_tests:
+      - unique_combination_of_columns:
+          arguments: { columns: [reporting_scope, entity_id, fiscal_period, statement_line] }
+          config: { severity: error, tags: [critical] }
+
+  - name: mart_balance_sheet
+    description: Point-in-time balance sheet per scope, entity and month end, with the accounting equation check.
+    meta: { owner: Group Financial Reporting, grain: reporting_scope x entity_id x fiscal_period x statement_line,
+            additivity: semi-additive (never sum across periods) }
+    columns:
+      - name: accounting_equation_difference
+        description: Assets - Liabilities - Equity (EUR); must be zero.
+        data_tests:
+          - expression_is_true:
+              arguments: { expression: "abs(accounting_equation_difference) <= 0.01" }
+              config: { severity: error, tags: [critical] }
+    data_tests:
+      - unique_combination_of_columns:
+          arguments: { columns: [reporting_scope, entity_id, fiscal_period, statement_line] }
+
+  - name: mart_cash_flow
+    description: Direct-method cash flow statement with opening/closing cash and the effect of exchange rates.
+    meta: { owner: Treasury, grain: reporting_scope x entity_id x fiscal_period x section x line }
+
+  - name: mart_trial_balance
+    description: Trial balance per entity, local account and period (functional currency).
+    meta: { owner: Group Financial Reporting, grain: entity_id x account_id x fiscal_period }
+    columns:
+      - name: entity_period_imbalance
+        data_tests:
+          - accepted_values:
+              arguments: { values: [0] }
+              config: { severity: error, tags: [critical] }
+
+  - name: mart_receivables_aging
+    description: Receivables aging and DSO by reporting date, entity and bucket (EUR, external customers).
+    meta: { owner: Accounts Receivable, grain: snapshot_date x entity_id x aging_bucket }
+
+  - name: mart_payables_aging
+    description: Payables aging and DPO by reporting date, entity and bucket (EUR, external suppliers).
+    meta: { owner: Accounts Payable, grain: snapshot_date x entity_id x aging_bucket }
+
+  - name: mart_budget_vs_actual
+    description: Budget versus actual with favourable/unfavourable variance rules and YTD (EUR).
+    meta: { owner: FP&A, grain: budget_version x scenario x entity x period x group account x cost center }
+    data_tests:
+      - unique_combination_of_columns:
+          arguments: { columns: [budget_version, scenario, entity_id, fiscal_period, group_account_code, cost_center_id] }
+          config: { severity: error, tags: [critical] }
+
+  - name: mart_financial_forecast
+    description: Seasonal-naive baseline forecast with chronological backtest (MAE, WAPE).
+    meta: { owner: FP&A, grain: metric x forecast_type x target_period }
+
+  - name: mart_revenue_analysis
+    description: Gross invoiced revenue by entity, product, segment and country (EUR).
+    meta: { owner: Commercial Finance, grain: entity x period x product x segment x country }
+
+  - name: mart_department_performance
+    description: Cost center and department expenditure with aggregated payroll and headcount.
+    meta: { owner: FP&A, grain: entity x period x cost center x statement line }
+
+  - name: mart_cash_position
+    description: Daily book vs bank balance per account, with expected 30-day inflows/outflows.
+    meta: { owner: Treasury, grain: balance_date x bank_account_id, additivity: semi-additive }
+
+  - name: mart_supplier_spend
+    description: Supplier spend, concentration rank and payment performance.
+    meta: { owner: Procurement, grain: entity x period x vendor }
+
+  - name: mart_intercompany_reconciliation
+    description: Intercompany pair reconciliation with tolerance-based status.
+    meta: { owner: Group Consolidation, grain: elimination_type x pair x period }
+
+  - name: mart_bank_reconciliation
+    description: Bank reconciliation summary per bank account and period end.
+    meta: { owner: Treasury, grain: bank_account_id x fiscal_period }
+
+  - name: mart_financial_exceptions
+    description: Unified exception register (review queue) across all reconciliation engines.
+    meta: { owner: Financial Controller, grain: exception_id }
+    columns:
+      - name: exception_id
+        data_tests: [unique, not_null]
+      - name: severity
+        data_tests: [{ accepted_values: { arguments: { values: [CRITICAL, WARNING, INFO] } } }]
+
+  - name: mart_financial_close
+    description: Month-end close monitor with nine close tasks and completion rate.
+    meta: { owner: Financial Controller, grain: entity_id x fiscal_period }
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [entity_id, fiscal_period] } }
+
+  - name: mart_executive_financial_summary
+    description: CFO KPI summary per scope, entity and period (ratios from aggregated components).
+    meta: { owner: CFO Office, grain: reporting_scope x entity_id x fiscal_period }
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [reporting_scope, entity_id, fiscal_period] } }
+
+exposures:
+  - name: cfo_streamlit_dashboard
+    label: CFO Financial Analytics Dashboard (Streamlit)
+    type: dashboard
+    maturity: high
+    url: http://localhost:8501
+    description: Thirteen-page CFO dashboard served from the published read-only warehouse snapshot.
+    owner: { name: Finance Data Engineering, email: finance-data@example.com }
+    depends_on:
+      - ref('mart_executive_financial_summary')
+      - ref('mart_profit_and_loss')
+      - ref('mart_balance_sheet')
+      - ref('mart_cash_flow')
+      - ref('mart_budget_vs_actual')
+      - ref('mart_receivables_aging')
+      - ref('mart_payables_aging')
+      - ref('mart_revenue_analysis')
+      - ref('mart_department_performance')
+      - ref('mart_intercompany_reconciliation')
+      - ref('mart_financial_exceptions')
+      - ref('mart_financial_close')
+      - ref('mart_cash_position')
+      - ref('mart_financial_forecast')
+  - name: powerbi_finance_semantic_model
+    label: Power BI finance semantic model (specification)
+    type: dashboard
+    maturity: medium
+    description: Power BI model built on the core star schema; see dashboards/powerbi.
+    owner: { name: BI Engineering, email: bi@example.com }
+    depends_on:
+      - ref('fact_general_ledger')
+      - ref('fact_monthly_account_balances')
+      - ref('fact_budgets')
+      - ref('dim_account')
+      - ref('dim_legal_entity')
+      - ref('dim_date')

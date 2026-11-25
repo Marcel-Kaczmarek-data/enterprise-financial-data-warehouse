@@ -61,8 +61,9 @@ def _bypass_proxy_for_local(endpoint: str | None) -> None:
 
 
 class S3ObjectStore:
-    def __init__(self, bucket: str, endpoint_url: str | None, region: str, access_key: str | None,
-                 secret_key: str | None) -> None:
+    def __init__(
+        self, bucket: str, endpoint_url: str | None, region: str, access_key: str | None, secret_key: str | None
+    ) -> None:
         import boto3
         from botocore.config import Config
 
@@ -70,9 +71,16 @@ class S3ObjectStore:
         self.bucket = bucket
         self.endpoint_url = endpoint_url
         self.client = boto3.client(
-            "s3", endpoint_url=endpoint_url or None, region_name=region,
-            aws_access_key_id=access_key or None, aws_secret_access_key=secret_key or None,
-            config=Config(retries={"max_attempts": 6, "mode": "standard"}, s3={"addressing_style": "path"}),
+            "s3",
+            endpoint_url=endpoint_url or None,
+            region_name=region,
+            aws_access_key_id=access_key or None,
+            aws_secret_access_key=secret_key or None,
+            config=Config(
+                retries={"max_attempts": 6, "mode": "standard"},
+                s3={"addressing_style": "path"},
+                max_pool_connections=32,
+            ),
         )
 
     def ensure_bucket(self, versioning: bool = True) -> None:
@@ -93,8 +101,13 @@ class S3ObjectStore:
         return body.read()
 
     def download(self, key: str, path: Path) -> None:
+        # Stream straight to the target file: boto3's download_file renames a temp file, which
+        # fails intermittently on Windows while antivirus/indexers hold a handle (WinError 32).
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.client.download_file(self.bucket, key, str(path))
+        body: Any = self.client.get_object(Bucket=self.bucket, Key=key)["Body"]
+        with path.open("wb") as fh:
+            for chunk in iter(lambda: body.read(1 << 20), b""):
+                fh.write(chunk)
 
     def exists(self, key: str) -> bool:
         from botocore.exceptions import ClientError
@@ -180,5 +193,6 @@ def object_store_from_config() -> S3ObjectStore | FilesystemObjectStore:
     cfg = local_config()["object_store"]
     if cfg["backend"] == "filesystem":
         return FilesystemObjectStore(repo_path(local_config()["paths"]["local_object_store"]), cfg["bucket"])
-    return S3ObjectStore(cfg["bucket"], cfg.get("endpoint_url"), cfg["region"], cfg.get("access_key"),
-                         cfg.get("secret_key"))
+    return S3ObjectStore(
+        cfg["bucket"], cfg.get("endpoint_url"), cfg["region"], cfg.get("access_key"), cfg.get("secret_key")
+    )

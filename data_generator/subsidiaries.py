@@ -103,8 +103,23 @@ CORE_DEPTS = {
     "SHARED_SERVICES": ["D21", "D17", "D20", "D15", "D13"],
     "OPERATING": ["D17", "D20", "D06", "D07", "D04", "D11"],
 }
-EXTRA_DEPT_PRIORITY = ["D13", "D05", "D02", "D21", "D10", "D22", "D01", "D14", "D08", "D12", "D09", "D23", "D03",
-                       "D16", "D19"]
+EXTRA_DEPT_PRIORITY = [
+    "D13",
+    "D05",
+    "D02",
+    "D21",
+    "D10",
+    "D22",
+    "D01",
+    "D14",
+    "D08",
+    "D12",
+    "D09",
+    "D23",
+    "D03",
+    "D16",
+    "D19",
+]
 
 PRODUCT_LINES = [
     # line, revenue type, standard cost ratio, (min, max) base list price EUR
@@ -114,18 +129,62 @@ PRODUCT_LINES = [
     ("Managed Services", "SERVICE", Decimal("0"), (2000, 16000)),
 ]
 PRODUCT_NAMES = {
-    "Hardware": ["Edge Gateway X1", "Edge Gateway X2", "Sensor Array S4", "Rack Controller R8", "Industrial Router IR5",
-                 "Secure Appliance SA3", "Storage Node N12", "Compute Module C7", "Power Unit P2", "Display Panel D9",
-                 "Field Terminal F3", "Network Switch W24"],
-    "Software Licenses": ["Fleet Analytics", "Asset Monitor", "Edge OS Enterprise", "Security Suite", "Data Connector Pack",
-                          "Workflow Studio", "Forecast Engine", "Compliance Vault", "Identity Hub", "Device Manager",
-                          "Insight Dashboards", "API Gateway"],
-    "Professional Services": ["Implementation Day Rate", "Solution Architecture", "Data Migration", "Integration Sprint",
-                              "Training Workshop", "Health Check", "Security Assessment", "Project Management",
-                              "Custom Development", "Go-Live Support", "Process Consulting", "Advisory Retainer"],
-    "Managed Services": ["Managed Edge Basic", "Managed Edge Pro", "24x7 Monitoring", "Managed Security",
-                         "Cloud Hosting Small", "Cloud Hosting Large", "Backup Service", "Service Desk",
-                         "Patch Management", "Capacity Planning", "Managed Analytics", "Premium Support"],
+    "Hardware": [
+        "Edge Gateway X1",
+        "Edge Gateway X2",
+        "Sensor Array S4",
+        "Rack Controller R8",
+        "Industrial Router IR5",
+        "Secure Appliance SA3",
+        "Storage Node N12",
+        "Compute Module C7",
+        "Power Unit P2",
+        "Display Panel D9",
+        "Field Terminal F3",
+        "Network Switch W24",
+    ],
+    "Software Licenses": [
+        "Fleet Analytics",
+        "Asset Monitor",
+        "Edge OS Enterprise",
+        "Security Suite",
+        "Data Connector Pack",
+        "Workflow Studio",
+        "Forecast Engine",
+        "Compliance Vault",
+        "Identity Hub",
+        "Device Manager",
+        "Insight Dashboards",
+        "API Gateway",
+    ],
+    "Professional Services": [
+        "Implementation Day Rate",
+        "Solution Architecture",
+        "Data Migration",
+        "Integration Sprint",
+        "Training Workshop",
+        "Health Check",
+        "Security Assessment",
+        "Project Management",
+        "Custom Development",
+        "Go-Live Support",
+        "Process Consulting",
+        "Advisory Retainer",
+    ],
+    "Managed Services": [
+        "Managed Edge Basic",
+        "Managed Edge Pro",
+        "24x7 Monitoring",
+        "Managed Security",
+        "Cloud Hosting Small",
+        "Cloud Hosting Large",
+        "Backup Service",
+        "Service Desk",
+        "Patch Management",
+        "Capacity Planning",
+        "Managed Analytics",
+        "Premium Support",
+    ],
 }
 
 
@@ -168,11 +227,18 @@ def build_org(seed: int, start: date, n_cost_centers: int, n_profit_centers: int
     dept_name = {d: n for d, n, _ in DEPARTMENTS}
     for i, (eid, d) in enumerate(pairs, start=1):
         cc_id = f"CC{i:03d}"
-        cost_centers.append({
-            "cost_center_id": cc_id, "cost_center_name": f"{eid} {dept_name[d]}", "entity_id": eid,
-            "department_id": d, "manager_employee_id": None, "is_active": True,
-            "created_at": created, "updated_at": created,
-        })
+        cost_centers.append(
+            {
+                "cost_center_id": cc_id,
+                "cost_center_name": f"{eid} {dept_name[d]}",
+                "entity_id": eid,
+                "department_id": d,
+                "manager_employee_id": None,
+                "is_active": True,
+                "created_at": created,
+                "updated_at": created,
+            }
+        )
         cc_dept[cc_id] = d
         ent_cc.setdefault(eid, []).append(cc_id)
         cc_map[(eid, d)] = cc_id
@@ -188,31 +254,54 @@ def build_org(seed: int, start: date, n_cost_centers: int, n_profit_centers: int
     profit_centers, ent_pc = [], {}
     for i, (eid, line) in enumerate(pc_pairs, start=1):
         pc_id = f"PC{i:03d}"
-        profit_centers.append({
-            "profit_center_id": pc_id, "profit_center_name": f"{eid} {line}", "entity_id": eid,
-            "product_line": line, "created_at": created, "updated_at": created,
-        })
+        profit_centers.append(
+            {
+                "profit_center_id": pc_id,
+                "profit_center_name": f"{eid} {line}",
+                "entity_id": eid,
+                "product_line": line,
+                "created_at": created,
+                "updated_at": created,
+            }
+        )
         ent_pc.setdefault(eid, {})[line] = pc_id
 
     rng = rng_for(seed, "products")
     products = []
     for li, (line, rev_type, cost_ratio, (lo, hi)) in enumerate(PRODUCT_LINES, start=1):
         for pi, name in enumerate(PRODUCT_NAMES[line], start=1):
-            products.append({
-                "product_id": f"P{li}{pi:02d}", "product_name": name, "product_line": line,
-                "revenue_type": rev_type,
-                "list_price_eur": Decimal(rng.randrange(lo, hi, 50)),
-                "standard_cost_ratio": cost_ratio, "created_at": created, "updated_at": created,
-            })
+            products.append(
+                {
+                    "product_id": f"P{li}{pi:02d}",
+                    "product_name": name,
+                    "product_line": line,
+                    "revenue_type": rev_type,
+                    "list_price_eur": Decimal(rng.randrange(lo, hi, 50)),
+                    "standard_cost_ratio": cost_ratio,
+                    "created_at": created,
+                    "updated_at": created,
+                }
+            )
     return Org(departments, cost_centers, profit_centers, products, cc_dept, ent_cc, ent_pc, cc_map)
 
 
 def legal_entity_rows(start: date) -> list[dict]:
     created = at(date(start.year - 1, 10, 1))
-    return [{
-        "entity_id": e.entity_id, "parent_entity_id": e.parent_entity_id, "entity_name": e.entity_name,
-        "country": e.country, "functional_currency": e.functional_currency, "reporting_currency": "EUR",
-        "fiscal_calendar": e.fiscal_calendar, "ownership_percentage": Decimal("100"),
-        "entity_type": e.entity_type, "effective_from": date(2015, 1, 1) if e.parent_entity_id else date(2010, 1, 1),
-        "effective_to": None, "created_at": created, "updated_at": created,
-    } for e in ENTITIES]
+    return [
+        {
+            "entity_id": e.entity_id,
+            "parent_entity_id": e.parent_entity_id,
+            "entity_name": e.entity_name,
+            "country": e.country,
+            "functional_currency": e.functional_currency,
+            "reporting_currency": "EUR",
+            "fiscal_calendar": e.fiscal_calendar,
+            "ownership_percentage": Decimal("100"),
+            "entity_type": e.entity_type,
+            "effective_from": date(2015, 1, 1) if e.parent_entity_id else date(2010, 1, 1),
+            "effective_to": None,
+            "created_at": created,
+            "updated_at": created,
+        }
+        for e in ENTITIES
+    ]

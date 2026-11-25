@@ -38,18 +38,37 @@ class FixedAssets:
         self.assets: list[Asset] = []
         self.by_entity: dict[str, list[Asset]] = defaultdict(list)
 
-    def _new(self, entity: Any, acq: date, cost: Decimal, cc: str | None, vi_id: int | None, rng,
-             asset_class: tuple[str, int] | None = None) -> Asset:
+    def _new(
+        self,
+        entity: Any,
+        acq: date,
+        cost: Decimal,
+        cc: str | None,
+        vi_id: int | None,
+        rng,
+        asset_class: tuple[str, int] | None = None,
+    ) -> Asset:
         cls, life = asset_class or rng.choice(ASSET_CLASSES)
         asset_id = self.ctx.ids.next("asset")
         start = add_months(date(acq.year, acq.month, 1), 1)
         row = {
-            "asset_id": asset_id, "asset_number": f"FA-{entity.entity_id}-{asset_id:06d}",
-            "entity_id": entity.entity_id, "asset_class": cls, "description": f"{cls.replace('_', ' ').title()} asset",
-            "acquisition_date": acq, "in_service_date": acq, "acquisition_cost": cost,
-            "currency": entity.functional_currency, "useful_life_months": life, "salvage_value": ZERO,
-            "depreciation_method": "STRAIGHT_LINE", "cost_center_id": cc, "vendor_invoice_id": vi_id,
-            "asset_status": "ACTIVE", "disposal_date": None, "disposal_proceeds": None,
+            "asset_id": asset_id,
+            "asset_number": f"FA-{entity.entity_id}-{asset_id:06d}",
+            "entity_id": entity.entity_id,
+            "asset_class": cls,
+            "description": f"{cls.replace('_', ' ').title()} asset",
+            "acquisition_date": acq,
+            "in_service_date": acq,
+            "acquisition_cost": cost,
+            "currency": entity.functional_currency,
+            "useful_life_months": life,
+            "salvage_value": ZERO,
+            "depreciation_method": "STRAIGHT_LINE",
+            "cost_center_id": cc,
+            "vendor_invoice_id": vi_id,
+            "asset_status": "ACTIVE",
+            "disposal_date": None,
+            "disposal_proceeds": None,
             "created_at": at(max(acq, self.ctx.start - timedelta(days=1)), 12),
             "updated_at": at(max(acq, self.ctx.start - timedelta(days=1)), 12),
         }
@@ -68,8 +87,9 @@ class FixedAssets:
             acq = self.ctx.start - timedelta(days=rng.randint(60, 1500))
             cc = rng.choice(self.ctx.org.entity_cost_centers[entity.entity_id])
             a = self._new(entity, acq, c, cc, None, rng)
-            months = max(0, (self.ctx.start.year - a.start_period.year) * 12 + self.ctx.start.month
-                         - a.start_period.month)
+            months = max(
+                0, (self.ctx.start.year - a.start_period.year) * 12 + self.ctx.start.month - a.start_period.month
+            )
             months = min(months, a.life - 1)
             a.months_done = months
             a.accumulated = round_money(c * months / a.life, fc)
@@ -99,22 +119,38 @@ class FixedAssets:
             a.accumulated += dep
             cc = a.row["cost_center_id"] or ctx.org.cc(eid, "D17")
             per_cc[cc] += dep
-            schedule_rows.append({
-                "asset_id": a.row["asset_id"], "fiscal_period": period_of(month_start), "entity_id": eid,
-                "depreciation_amount": dep, "accumulated_depreciation": a.accumulated,
-                "net_book_value": a.cost - a.accumulated, "journal_id": None,
-                "created_at": at(m_end, 20), "updated_at": at(m_end, 20),
-            })
+            schedule_rows.append(
+                {
+                    "asset_id": a.row["asset_id"],
+                    "fiscal_period": period_of(month_start),
+                    "entity_id": eid,
+                    "depreciation_amount": dep,
+                    "accumulated_depreciation": a.accumulated,
+                    "net_book_value": a.cost - a.accumulated,
+                    "journal_id": None,
+                    "created_at": at(m_end, 20),
+                    "updated_at": at(m_end, 20),
+                }
+            )
         if per_cc:
             lines = []
             for cc, amt in sorted(per_cc.items()):
-                lines += [Line("7000", amt, fc, None, cc, description="Depreciation"),
-                          Line("1590", -amt, fc, None, cc, description="Accumulated depreciation")]
-            jid = ctx.ledger.post(eid, m_end, "DEPRECIATION", lines, source_document_type="DEPRECIATION_RUN",
-                                  source_document_id=f"DEP-{eid}-{period_of(month_start)}",
-                                  reference_number=f"DEP-{eid}-{period_of(month_start)}",
-                                  description="Monthly depreciation run", created_at=at(m_end, 20),
-                                  created_by="close.automation")
+                lines += [
+                    Line("7000", amt, fc, None, cc, description="Depreciation"),
+                    Line("1590", -amt, fc, None, cc, description="Accumulated depreciation"),
+                ]
+            jid = ctx.ledger.post(
+                eid,
+                m_end,
+                "DEPRECIATION",
+                lines,
+                source_document_type="DEPRECIATION_RUN",
+                source_document_id=f"DEP-{eid}-{period_of(month_start)}",
+                reference_number=f"DEP-{eid}-{period_of(month_start)}",
+                description="Monthly depreciation run",
+                created_at=at(m_end, 20),
+                created_by="close.automation",
+            )
             for r in schedule_rows:
                 r["journal_id"] = jid
                 ctx.sink.emit("erp.depreciation_schedule", r)
@@ -127,19 +163,40 @@ class FixedAssets:
             proceeds = round_money(a.cost * Decimal(repr(rng.uniform(0, 0.08))), fc)
             cc = a.row["cost_center_id"] or ctx.org.cc(eid, "D17")
             gain = proceeds - (a.cost - a.accumulated)
-            counter = [Line("1590", a.accumulated, fc, None, cc, description="Remove accumulated depreciation"),
-                       Line("1500", -a.cost, fc, None, cc, description="Remove asset cost")]
+            counter = [
+                Line("1590", a.accumulated, fc, None, cc, description="Remove accumulated depreciation"),
+                Line("1500", -a.cost, fc, None, cc, description="Remove asset cost"),
+            ]
             if gain:
                 counter.append(Line("8350", -gain, fc, None, cc, description="Gain on disposal"))
             if proceeds > 0:
-                ctx.treasury.pay(eid, d, "INBOUND", "ASSET_SALE", fc, proceeds, counter,
-                                 counterparty_type="BUYER", counterparty_name="Asset buyer", cost_center_id=cc,
-                                 journal_type="ASSET_DISPOSAL", description=f"Disposal {a.row['asset_number']}")
+                ctx.treasury.pay(
+                    eid,
+                    d,
+                    "INBOUND",
+                    "ASSET_SALE",
+                    fc,
+                    proceeds,
+                    counter,
+                    counterparty_type="BUYER",
+                    counterparty_name="Asset buyer",
+                    cost_center_id=cc,
+                    journal_type="ASSET_DISPOSAL",
+                    description=f"Disposal {a.row['asset_number']}",
+                )
             else:
-                ctx.ledger.post(eid, d, "ASSET_DISPOSAL", counter, source_document_type="FIXED_ASSET",
-                                source_document_id=str(a.row["asset_id"]), reference_number=a.row["asset_number"],
-                                description="Scrapping of fully depreciated asset")
+                ctx.ledger.post(
+                    eid,
+                    d,
+                    "ASSET_DISPOSAL",
+                    counter,
+                    source_document_type="FIXED_ASSET",
+                    source_document_id=str(a.row["asset_id"]),
+                    reference_number=a.row["asset_number"],
+                    description="Scrapping of fully depreciated asset",
+                )
             a.disposed = True
-            a.row = dict(a.row, asset_status="DISPOSED", disposal_date=d, disposal_proceeds=proceeds,
-                         updated_at=at(d, 16))
+            a.row = dict(
+                a.row, asset_status="DISPOSED", disposal_date=d, disposal_proceeds=proceeds, updated_at=at(d, 16)
+            )
             ctx.sink.emit("erp.fixed_assets", a.row)

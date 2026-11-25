@@ -34,7 +34,7 @@ object_store:
   secret_key: ${FDW_S3_SECRET_KEY:-finance_minio_local_only}
 
 crm_api:
-  base_url: ${FDW_CRM_API_URL:-http://localhost:8085}
+  base_url: ${FDW_CRM_API_URL:-http://127.0.0.1:8085}
   page_size: 500
   timeout_seconds: 30
   max_retries: 5

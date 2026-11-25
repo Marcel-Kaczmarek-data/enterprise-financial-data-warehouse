@@ -1,0 +1,168 @@
+version: 2
+
+models:
+  - name: fact_general_ledger
+    description: >
+      Posted general-ledger lines (grain: one posted journal line) with group account mapping,
+      functional and EUR amounts and full lineage to the source document and ingestion batch.
+      Incremental (delete+insert on DuckDB, MERGE on Snowflake) with a lookback for back-dated postings.
+    meta: { owner: Group Financial Reporting, grain: journal_line_id, additivity: additive }
+    columns:
+      - name: journal_line_id
+        data_tests: [unique, not_null]
+      - name: group_account_code
+        description: Group account; NULL would mean an unmapped local account.
+        data_tests:
+          - not_null: { config: { severity: error, tags: [critical] } }
+          - relationships:
+              arguments: { to: ref('dim_account'), field: group_account_code }
+              config: { severity: error, tags: [critical] }
+      - name: signed_amount_reporting
+        data_tests:
+          - not_null: { config: { severity: error, tags: [critical] }, description: missing exchange rate }
+    data_tests:
+      - sums_to_zero:
+          arguments: { column_name: signed_amount_functional, group_by: [journal_id] }
+          config: { severity: error, tags: [critical] }
+          description: Every posted journal balances exactly in functional currency (double entry).
+      - expression_is_true:
+          arguments: { expression: "debit_amount >= 0 and credit_amount >= 0 and debit_amount - credit_amount = signed_amount_functional" }
+          config: { severity: error, tags: [critical] }
+
+  - name: fact_monthly_account_balances
+    description: Entity x local account x period balances (semi-additive) with EUR translation by method.
+    meta: { owner: Group Financial Reporting, grain: entity_id x account_id x fiscal_period, additivity: semi-additive }
+    columns:
+      - name: balance_key
+        data_tests: [unique, not_null]
+    data_tests:
+      - sums_to_zero:
+          arguments: { column_name: closing_balance_functional, group_by: [entity_id, fiscal_period] }
+          config: { severity: error, tags: [critical] }
+          description: Trial balance is balanced for every entity and period.
+      - expression_is_true:
+          arguments: { expression: "opening_balance_functional + movement_functional = closing_balance_functional" }
+          config: { severity: error, tags: [critical] }
+
+  - name: fact_customer_invoices
+    description: One customer invoice with point-in-time customer attributes and settlement measures.
+    meta: { owner: Accounts Receivable, grain: invoice_id }
+    columns:
+      - name: invoice_id
+        data_tests: [unique, not_null]
+      - name: invoice_amount_functional
+        data_tests: [{ not_null: { config: { severity: error, tags: [critical] } } }]
+
+  - name: fact_receivables_snapshot
+    description: Open customer invoices as of each reporting date (historical as-of aging).
+    meta: { owner: Accounts Receivable, grain: snapshot_date x invoice_id, additivity: semi-additive }
+    columns:
+      - name: aging_bucket
+        data_tests: [not_null]
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [snapshot_date, invoice_id] } }
+
+  - name: fact_payables_snapshot
+    description: Open posted supplier invoices as of each reporting date.
+    meta: { owner: Accounts Payable, grain: snapshot_date x vendor_invoice_id, additivity: semi-additive }
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [snapshot_date, vendor_invoice_id] } }
+
+  - name: fact_vendor_invoices
+    description: One supplier invoice, including blocked duplicates (zero liability, flagged).
+    meta: { owner: Accounts Payable, grain: vendor_invoice_id }
+    columns:
+      - name: vendor_invoice_id
+        data_tests: [unique, not_null]
+
+  - name: fact_payments
+    description: One ERP payment or receipt.
+    meta: { owner: Treasury, grain: payment_id }
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+
+  - name: fact_payment_allocations
+    description: One allocation of a payment to an invoice or credit note (many-to-many settlement).
+    meta: { owner: Treasury, grain: allocation_id }
+    columns:
+      - name: allocation_id
+        data_tests: [unique, not_null]
+
+  - name: fact_bank_transactions
+    description: One bank statement line (signed, account currency).
+    meta: { owner: Treasury, grain: bank_transaction_id }
+    columns:
+      - name: bank_transaction_id
+        data_tests: [unique, not_null]
+
+  - name: fact_daily_cash_balances
+    description: Book and bank balance per bank account and calendar day.
+    meta: { owner: Treasury, grain: bank_account_id x balance_date, additivity: semi-additive }
+    data_tests:
+      - unique_combination_of_columns: { arguments: { columns: [bank_account_id, balance_date] } }
+
+  - name: fact_budgets
+    description: Budget and forecast plan lines.
+    meta: { owner: FP&A, grain: entity x period x group account x cost center x version x scenario }
+    data_tests:
+      - unique_combination_of_columns:
+          arguments: { columns: [entity_id, fiscal_period, group_account_code, cost_center_id, budget_version, scenario] }
+          config: { severity: error, tags: [critical] }
+          description: Budget grain must be unique, otherwise budget amounts would double count.
+
+  - name: fact_payroll
+    description: Payroll cost per employee and pay period (restricted - PAYROLL classification).
+    meta: { owner: Payroll, grain: payroll_line_id, sensitivity: PAYROLL }
+    columns:
+      - name: payroll_line_id
+        data_tests: [unique, not_null]
+
+  - name: dim_customer
+    description: Customer dimension, SCD Type 2 from the CRM field history.
+    meta: { owner: Sales Operations, grain: customer_id x valid_from }
+    columns:
+      - name: customer_key
+        data_tests: [unique, not_null]
+    data_tests:
+      - valid_scd2_intervals: { arguments: { business_key: customer_id } }
+
+  - name: dim_employee
+    description: Employee dimension, SCD Type 2 from effective-dated job history (no personal names).
+    meta: { owner: People Operations, grain: employee_id x valid_from }
+    columns:
+      - name: employee_key
+        data_tests: [unique, not_null]
+    data_tests:
+      - valid_scd2_intervals: { arguments: { business_key: employee_id } }
+
+  - name: dim_vendor
+    description: Supplier dimension, SCD Type 2 from the dbt snapshot snap_erp__vendors.
+    meta: { owner: Procurement, grain: vendor_id x valid_from }
+    columns:
+      - name: vendor_key
+        data_tests: [unique, not_null]
+
+  - name: dim_account
+    description: Group chart of accounts with flattened hierarchy (recursive CTE).
+    meta: { owner: Group Financial Reporting, grain: group_account_code }
+    columns:
+      - name: group_account_code
+        data_tests: [unique, not_null]
+
+  - name: dim_legal_entity
+    description: Legal entities with recursive consolidation path.
+    meta: { owner: Group Financial Reporting, grain: entity_id }
+    columns:
+      - name: entity_id
+        data_tests: [unique, not_null]
+
+  - name: dim_date
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: dim_cost_center
+    columns:
+      - name: cost_center_id
+        data_tests: [unique, not_null]

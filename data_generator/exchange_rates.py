@@ -25,13 +25,38 @@ from finance_common.money import (
 )
 
 START_LEVELS = {  # EUR -> X at the start of the simulation
-    "USD": 1.2200, "GBP": 0.8990, "CHF": 1.0800, "SEK": 10.0800, "JPY": 126.30,
-    "SGD": 1.6200, "INR": 89.50, "CAD": 1.5600, "CNY": 7.9600,
+    "USD": 1.2200,
+    "GBP": 0.8990,
+    "CHF": 1.0800,
+    "SEK": 10.0800,
+    "JPY": 126.30,
+    "SGD": 1.6200,
+    "INR": 89.50,
+    "CAD": 1.5600,
+    "CNY": 7.9600,
 }
-ANNUAL_VOL = {"USD": 0.075, "GBP": 0.06, "CHF": 0.05, "SEK": 0.06, "JPY": 0.09, "SGD": 0.05, "INR": 0.07,
-              "CAD": 0.07, "CNY": 0.06}
-DRIFT = {"USD": -0.025, "GBP": 0.01, "CHF": -0.025, "SEK": 0.012, "JPY": 0.035, "SGD": -0.01, "INR": 0.025,
-         "CAD": -0.01, "CNY": -0.01}
+ANNUAL_VOL = {
+    "USD": 0.075,
+    "GBP": 0.06,
+    "CHF": 0.05,
+    "SEK": 0.06,
+    "JPY": 0.09,
+    "SGD": 0.05,
+    "INR": 0.07,
+    "CAD": 0.07,
+    "CNY": 0.06,
+}
+DRIFT = {
+    "USD": -0.025,
+    "GBP": 0.01,
+    "CHF": -0.025,
+    "SEK": 0.012,
+    "JPY": 0.035,
+    "SGD": -0.01,
+    "INR": 0.025,
+    "CAD": -0.01,
+    "CNY": -0.01,
+}
 MAX_LOOKBACK_DAYS = 5
 
 
@@ -118,8 +143,12 @@ class FxEngine:
             corr_day += timedelta(days=1)
         good = self.eur[(corr_day, "USD")]
         for row in rows:
-            if row["rate_date"] == corr_day and row["source_currency"] == "EUR" and row["target_currency"] == "USD" \
-                    and row["rate_type"] == "SPOT":
+            if (
+                row["rate_date"] == corr_day
+                and row["source_currency"] == "EUR"
+                and row["target_currency"] == "USD"
+                and row["rate_type"] == "SPOT"
+            ):
                 row["exchange_rate"] = round_rate(good * Decimal("1.0500"), PUBLISHED_RATE_PRECISION)
         rows.append(self._row(corr_day, "USD", good, "SPOT", at(corr_day + timedelta(days=1), 8, 15)))
         # Invalid publication (zero rate) published after the valid one – must be quarantined.
@@ -132,6 +161,11 @@ class FxEngine:
     @staticmethod
     def _row(d: date, ccy: str, rate: Decimal, rate_type: str, published) -> dict:
         return {
-            "rate_date": d, "source_currency": "EUR", "target_currency": ccy, "exchange_rate": rate,
-            "rate_type": rate_type, "provider": "HALCYON-FX", "publication_timestamp": published,
+            "rate_date": d,
+            "source_currency": "EUR",
+            "target_currency": ccy,
+            "exchange_rate": rate,
+            "rate_type": rate_type,
+            "provider": "HALCYON-FX",
+            "publication_timestamp": published,
         }

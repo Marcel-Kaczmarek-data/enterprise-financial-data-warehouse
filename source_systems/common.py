@@ -62,8 +62,9 @@ def export_as_of_csv(profile: str, fqn: str, cutoff: datetime, since: datetime |
     return int(n)
 
 
-def read_as_of(profile: str, fqn: str, cutoff: datetime, since: datetime | None = None,
-               latest_only: bool = True) -> pa.Table:
+def read_as_of(
+    profile: str, fqn: str, cutoff: datetime, since: datetime | None = None, latest_only: bool = True
+) -> pa.Table:
     """Rows of ``fqn`` visible at ``cutoff`` (optionally only versions after ``since``)."""
     contract = contracts.get(fqn)
     path = generated_dir(profile) / contract.system / contract.name

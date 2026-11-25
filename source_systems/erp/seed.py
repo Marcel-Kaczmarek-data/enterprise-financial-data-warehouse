@@ -26,8 +26,14 @@ SCHEMA = "erp"
 
 def connect() -> psycopg.Connection:
     pg = local_config()["source_postgres"]
-    return psycopg.connect(host=pg["host"], port=int(pg["port"]), dbname=pg["database"], user=pg["user"],
-                           password=pg["password"], autocommit=False)
+    return psycopg.connect(
+        host=pg["host"],
+        port=int(pg["port"]),
+        dbname=pg["database"],
+        user=pg["user"],
+        password=pg["password"],
+        autocommit=False,
+    )
 
 
 def create_schema(conn: psycopg.Connection, drop: bool) -> None:
@@ -38,8 +44,10 @@ def create_schema(conn: psycopg.Connection, drop: bool) -> None:
         for t in contracts.tables_for("erp"):
             cur.execute(t.postgres_ddl(SCHEMA))
             if "updated_at" in t.column_names:
-                cur.execute(f'CREATE INDEX IF NOT EXISTS ix_{t.name}_updated_at ON {SCHEMA}."{t.name}" '
-                            f'(updated_at, {", ".join(t.primary_key)})')
+                cur.execute(
+                    f'CREATE INDEX IF NOT EXISTS ix_{t.name}_updated_at ON {SCHEMA}."{t.name}" '
+                    f"(updated_at, {', '.join(t.primary_key)})"
+                )
     conn.commit()
 
 
@@ -57,8 +65,10 @@ def load_csv(conn: psycopg.Connection, contract: contracts.TableContract, csv_pa
                 cp.write(chunk)
         if merge:
             updates = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c not in contract.primary_key)
-            cur.execute(f"INSERT INTO {target} ({col_sql}) SELECT {col_sql} FROM _stage "
-                        f"ON CONFLICT ({pk_sql}) DO UPDATE SET {updates}")
+            cur.execute(
+                f"INSERT INTO {target} ({col_sql}) SELECT {col_sql} FROM _stage "
+                f"ON CONFLICT ({pk_sql}) DO UPDATE SET {updates}"
+            )
         cur.execute(f"ANALYZE {target}")
     conn.commit()
 

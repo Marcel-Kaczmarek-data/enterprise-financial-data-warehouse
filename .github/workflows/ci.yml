@@ -1,0 +1,129 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Ruff lint
+        run: ruff check . && ruff format --check .
+      - name: mypy (typed core packages)
+        run: mypy finance_common ingestion warehouse
+      - name: SQLFluff (standalone SQL library)
+        run: sqlfluff lint sql --dialect duckdb
+
+  unit-and-financial-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Unit tests + generator financial invariants (with coverage)
+        run: pytest tests/unit tests/financial -q --cov --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage, path: coverage.xml }
+
+  pipeline-end-to-end:
+    # Full local pipeline (small profile) against real PostgreSQL and S3-compatible storage.
+    runs-on: ubuntu-latest
+    needs: unit-and-financial-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Start core services
+        run: python scripts/pipeline.py up
+      - name: Seed sources, ingest, load raw
+        run: |
+          python scripts/pipeline.py seed --profile small
+          python scripts/pipeline.py ingest
+          python scripts/pipeline.py load
+      - name: dbt build (models + tests) and publication gate
+        run: |
+          python scripts/pipeline.py transform
+          python scripts/pipeline.py publish
+      - name: Integration and end-to-end tests (idempotency, golden scenarios)
+        run: pytest tests/integration tests/end_to_end -q
+      - name: dbt docs
+        run: cd dbt_finance && DBT_PROFILES_DIR=. dbt docs generate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: dbt-artifacts, path: "dbt_finance/target/*.json" }
+
+  dbt-compile-snowflake:
+    # Runs only when Snowflake secrets exist. A skip is reported as a notice, never as a pass.
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report skip when credentials are absent
+        if: env.SNOWFLAKE_ACCOUNT == ''
+        run: echo "::notice::SKIPPED - Snowflake credentials not configured (this is not a pass)"
+      - uses: actions/setup-python@v5
+        if: env.SNOWFLAKE_ACCOUNT != ''
+        with: { python-version: "3.12" }
+      - name: Compile and test against Snowflake
+        if: env.SNOWFLAKE_ACCOUNT != ''
+        env:
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/sf_key.p8
+        run: |
+          pip install -r requirements-cloud.txt
+          printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > /tmp/sf_key.p8 && chmod 600 /tmp/sf_key.p8
+          cd dbt_finance && DBT_PROFILES_DIR=. dbt compile --target snowflake
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infrastructure/terraform fmt -check -recursive
+      - run: terraform -chdir=infrastructure/terraform/environments/dev init -backend=false
+      - run: terraform -chdir=infrastructure/terraform/environments/dev validate
+
+  airflow-dag-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install Airflow with official constraints
+        run: |
+          pip install "apache-airflow==3.1.5" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.1.5/constraints-3.12.txt"
+      - name: Import every DAG and check for cycles / import errors
+        run: python orchestration/validate_dags.py
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Secret scanning (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Dependency vulnerability scan
+        run: pip install pip-audit && pip-audit -r requirements.txt
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f infrastructure/docker/python.Dockerfile -t fdw-python:ci .

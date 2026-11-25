@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,7 @@ _ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
 
 def _interpolate(value: Any) -> Any:
     if isinstance(value, str):
+
         def repl(match: re.Match[str]) -> str:
             name, default = match.group(1), match.group(2)
             return os.environ.get(name, default if default is not None else "")
@@ -36,17 +37,17 @@ def load_yaml(name: str) -> dict[str, Any]:
         return _interpolate(yaml.safe_load(fh))
 
 
-@lru_cache(maxsize=None)
+@cache
 def local_config() -> dict[str, Any]:
     return load_yaml("local.yaml")
 
 
-@lru_cache(maxsize=None)
+@cache
 def financial_rules() -> dict[str, Any]:
     return load_yaml("financial-rules.yaml")
 
 
-@lru_cache(maxsize=None)
+@cache
 def source_config() -> dict[str, Any]:
     return load_yaml("source-config.yaml")
 

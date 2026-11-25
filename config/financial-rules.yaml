@@ -36,7 +36,7 @@ rounding:
   max_residual_per_line: "0.01"
   journal_balance_tolerance: "0.00"     # posted journals must balance exactly in functional currency
   reconciliation_tolerance: "0.01"      # subledger vs GL tolerance (functional currency)
-  intercompany_tolerance_pct: "0.5"     # IC mismatch tolerance in group currency, percent of amount
+  intercompany_tolerance_pct: "2.0"     # IC mismatch tolerance in group currency, percent of amount
 
 vat_rates:          # simulated standard rates, percent
   NL: "21"
@@ -79,7 +79,7 @@ receivables:
     - { name: "120+", min: 121, max: null }
 
 bank_reconciliation:
-  date_tolerance_days: 3
+  date_tolerance_days: 5          # calendar days (3 business days including a weekend)
   amount_tolerance: "0.00"
   auto_approve_ambiguous: false
 

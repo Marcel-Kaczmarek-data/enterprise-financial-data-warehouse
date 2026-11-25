@@ -1,0 +1,73 @@
+group_account_code,group_account_name,parent_group_account_code,hierarchy_level,account_type,account_category,statement,statement_line,normal_balance,translation_method,is_posting_account
+1,Assets,,1,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+11,Current assets,1,2,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+110,Cash and cash equivalents,11,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1010,Bank accounts,110,4,ASSET,Assets,BALANCE_SHEET,Cash and cash equivalents,DEBIT,CLOSING,True
+120,Receivables,11,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1100,Accounts receivable - trade,120,4,ASSET,Assets,BALANCE_SHEET,Accounts receivable,DEBIT,CLOSING,True
+1150,Accounts receivable - intercompany,120,4,ASSET,Assets,BALANCE_SHEET,Accounts receivable,DEBIT,CLOSING,True
+1190,Intercompany elimination suspense,120,4,ASSET,Assets,BALANCE_SHEET,Other current assets,DEBIT,CLOSING,True
+130,Inventories,11,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1200,Inventory - goods for resale,130,4,ASSET,Assets,BALANCE_SHEET,Inventory,DEBIT,CLOSING,True
+140,Prepayments and other current assets,11,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1300,Prepaid expenses,140,4,ASSET,Assets,BALANCE_SHEET,Prepaid expenses,DEBIT,CLOSING,True
+1400,VAT receivable,140,4,ASSET,Assets,BALANCE_SHEET,Other current assets,DEBIT,CLOSING,True
+15,Non-current assets,1,2,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+150,"Property, plant and equipment",15,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1500,PP&E - acquisition cost,150,4,ASSET,Assets,BALANCE_SHEET,"Property, plant and equipment",DEBIT,CLOSING,True
+1590,PP&E - accumulated depreciation,150,4,ASSET,Assets,BALANCE_SHEET,Accumulated depreciation,CREDIT,CLOSING,True
+160,Other non-current assets,15,3,ASSET,Assets,BALANCE_SHEET,,DEBIT,CLOSING,False
+1600,Long-term deposits,160,4,ASSET,Assets,BALANCE_SHEET,Other non-current assets,DEBIT,CLOSING,True
+1700,Investments in subsidiaries,160,4,ASSET,Assets,BALANCE_SHEET,Other non-current assets,DEBIT,HISTORICAL,True
+2,Liabilities,,1,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+21,Current liabilities,2,2,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+210,Trade payables,21,3,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+2000,Accounts payable - trade,210,4,LIABILITY,Liabilities,BALANCE_SHEET,Accounts payable,CREDIT,CLOSING,True
+2050,Accounts payable - intercompany,210,4,LIABILITY,Liabilities,BALANCE_SHEET,Accounts payable,CREDIT,CLOSING,True
+220,Accruals,21,3,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+2100,Accrued expenses,220,4,LIABILITY,Liabilities,BALANCE_SHEET,Accrued expenses,CREDIT,CLOSING,True
+2300,Salaries and reimbursements payable,220,4,LIABILITY,Liabilities,BALANCE_SHEET,Accrued expenses,CREDIT,CLOSING,True
+230,Tax liabilities,21,3,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+2200,VAT payable,230,4,LIABILITY,Liabilities,BALANCE_SHEET,Tax liabilities,CREDIT,CLOSING,True
+2210,Payroll taxes payable,230,4,LIABILITY,Liabilities,BALANCE_SHEET,Tax liabilities,CREDIT,CLOSING,True
+2220,Income tax payable,230,4,LIABILITY,Liabilities,BALANCE_SHEET,Tax liabilities,CREDIT,CLOSING,True
+240,Short-term debt,21,3,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+2400,Short-term borrowings,240,4,LIABILITY,Liabilities,BALANCE_SHEET,Short-term debt,CREDIT,CLOSING,True
+25,Non-current liabilities,2,2,LIABILITY,Liabilities,BALANCE_SHEET,,CREDIT,CLOSING,False
+2500,Long-term borrowings,25,4,LIABILITY,Liabilities,BALANCE_SHEET,Long-term debt,CREDIT,CLOSING,True
+3,Equity,,1,EQUITY,Equity,BALANCE_SHEET,,CREDIT,HISTORICAL,False
+3000,Share capital,3,4,EQUITY,Equity,BALANCE_SHEET,Share capital,CREDIT,HISTORICAL,True
+3100,Retained earnings,3,4,EQUITY,Equity,BALANCE_SHEET,Retained earnings,CREDIT,HISTORICAL,True
+3200,Currency translation reserve,3,4,EQUITY,Equity,BALANCE_SHEET,Currency translation adjustments,CREDIT,HISTORICAL,True
+4,Revenue,,1,REVENUE,Revenue,INCOME_STATEMENT,,CREDIT,AVERAGE,False
+4000,Product revenue,4,4,REVENUE,Revenue,INCOME_STATEMENT,Product revenue,CREDIT,AVERAGE,True
+4100,Service revenue,4,4,REVENUE,Revenue,INCOME_STATEMENT,Service revenue,CREDIT,AVERAGE,True
+4200,Other operating revenue,4,4,REVENUE,Revenue,INCOME_STATEMENT,Other operating revenue,CREDIT,AVERAGE,True
+4500,Intercompany service revenue,4,4,REVENUE,Revenue,INCOME_STATEMENT,Other operating revenue,CREDIT,AVERAGE,True
+5,Cost of goods sold,,1,EXPENSE,Cost of goods sold,INCOME_STATEMENT,,DEBIT,AVERAGE,False
+5000,Cost of goods sold,5,4,EXPENSE,Cost of goods sold,INCOME_STATEMENT,Cost of goods sold,DEBIT,AVERAGE,True
+6,Operating expenses,,1,EXPENSE,Operating expenses,INCOME_STATEMENT,,DEBIT,AVERAGE,False
+6000,Salaries and wages,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Salaries and benefits,DEBIT,AVERAGE,True
+6050,Employer social contributions,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Salaries and benefits,DEBIT,AVERAGE,True
+6100,Software and cloud services,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Technology expenses,DEBIT,AVERAGE,True
+6150,IT hardware and telecom,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Technology expenses,DEBIT,AVERAGE,True
+6200,Advertising and marketing,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Marketing expenses,DEBIT,AVERAGE,True
+6300,Rent,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Rent and utilities,DEBIT,AVERAGE,True
+6350,Utilities,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Rent and utilities,DEBIT,AVERAGE,True
+6400,Office and administrative,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Administrative expenses,DEBIT,AVERAGE,True
+6420,Bad debt expense,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Administrative expenses,DEBIT,AVERAGE,True
+6450,Bank charges,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Administrative expenses,DEBIT,AVERAGE,True
+6500,Travel and entertainment,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Travel expenses,DEBIT,AVERAGE,True
+6600,Legal and professional fees,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Professional services,DEBIT,AVERAGE,True
+6650,Intercompany management fees,6,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Administrative expenses,DEBIT,AVERAGE,True
+7,Depreciation and amortization,,1,EXPENSE,Operating expenses,INCOME_STATEMENT,,DEBIT,AVERAGE,False
+7000,Depreciation expense,7,4,EXPENSE,Operating expenses,INCOME_STATEMENT,Depreciation and amortization,DEBIT,AVERAGE,True
+8,Financial and other items,,1,EXPENSE,Other expenses,INCOME_STATEMENT,,DEBIT,AVERAGE,False
+8000,Interest income,8,4,REVENUE,Other income,INCOME_STATEMENT,Finance income,CREDIT,AVERAGE,True
+8100,Interest expense,8,4,EXPENSE,Other expenses,INCOME_STATEMENT,Finance expenses,DEBIT,AVERAGE,True
+8200,Foreign exchange gains and losses,8,4,EXPENSE,Other expenses,INCOME_STATEMENT,Other non-operating items,DEBIT,AVERAGE,True
+8300,Early payment discounts received,8,4,REVENUE,Other income,INCOME_STATEMENT,Other non-operating items,CREDIT,AVERAGE,True
+8350,Gain or loss on asset disposals,8,4,EXPENSE,Other expenses,INCOME_STATEMENT,Other non-operating items,DEBIT,AVERAGE,True
+8400,Intercompany elimination differences,8,4,EXPENSE,Other expenses,INCOME_STATEMENT,Other non-operating items,DEBIT,AVERAGE,True
+9,Taxes,,1,EXPENSE,Tax expenses,INCOME_STATEMENT,,DEBIT,AVERAGE,False
+9000,Income tax expense,9,4,EXPENSE,Tax expenses,INCOME_STATEMENT,Income tax expense,DEBIT,AVERAGE,True

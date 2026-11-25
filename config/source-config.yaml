@@ -1,0 +1,40 @@
+# Source extraction configuration. Table contracts (columns, keys, types) live in
+# finance_common/contracts.py; this file only controls HOW each source is extracted.
+defaults:
+  overlap_minutes: 120        # re-read a window behind the watermark (late commits, clock skew)
+  max_rows_per_file: 500000
+
+erp:
+  system: erp
+  kind: postgres
+  schema: erp
+  # Small reference tables are fully extracted every run (cheap, catches hard deletes).
+  full_extract: [legal_entities, departments, cost_centers, profit_centers, products, accounts,
+                 account_mappings, bank_accounts, loans, opening_balances]
+  # Everything else: incremental on the composite watermark (updated_at, primary key).
+  incremental_default: true
+
+crm:
+  system: crm
+  kind: rest_api
+  resources: [customers, customer_history, opportunities, sales_orders, revenue_forecasts]
+  watermark_param: updated_since
+  retry:
+    max_attempts: 6
+    backoff_initial_seconds: 0.5
+    backoff_multiplier: 2.0
+    backoff_max_seconds: 20
+
+files:
+  banking:
+    - { pattern: "banking/statements/*/*.csv", table: bank_transactions, format: csv }
+    - { pattern: "banking/balances/*.json", table: account_balances, format: json, records_path: data }
+  payroll:
+    - { pattern: "payroll/payroll_*.csv", table: payroll_transactions, format: csv }
+    - { pattern: "payroll/expense_claims_*.csv", table: expense_claims, format: csv }
+    - { pattern: "payroll/employees_*.csv", table: employees, format: csv }
+    - { pattern: "payroll/job_history_*.csv", table: employee_job_history, format: csv }
+  budgeting:
+    - { pattern: "budgeting/*/*.xlsx", table: budget_plans, format: excel, sheet: plan_lines }
+  fx:
+    - { pattern: "fx/*.csv", table: exchange_rates, format: csv }

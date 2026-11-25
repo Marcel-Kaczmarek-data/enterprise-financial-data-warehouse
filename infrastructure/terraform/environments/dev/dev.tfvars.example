@@ -1,0 +1,5 @@
+# Copy to dev.tfvars and fill in real values. *.tfvars files are git-ignored; this .example is not.
+name_prefix             = "yourorg-fdw-dev"
+pipeline_principal_arns = ["arn:aws:iam::123456789012:role/airflow-worker"]
+snowflake_iam_user_arn  = "arn:aws:iam::123456789012:user/abc1-s-xyz"
+snowflake_external_id   = "REPLACE_ME"

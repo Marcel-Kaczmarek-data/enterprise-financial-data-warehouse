@@ -259,8 +259,10 @@ class Ledger:
         for ln in lines:
             if ln.functional is not None:
                 f = round_money(ln.functional, fc)
-                r = ln.rate if ln.rate is not None else (
-                    round_rate(abs(f / ln.amount)) if ln.amount != 0 else Decimal(1)
+                r = (
+                    ln.rate
+                    if ln.rate is not None
+                    else (round_rate(abs(f / ln.amount)) if ln.amount != 0 else Decimal(1))
                 )
             elif ln.currency == fc:
                 f, r = round_money(ln.amount, fc), Decimal(1)
@@ -276,35 +278,59 @@ class Ledger:
                 raise UnbalancedJournalError(
                     f"{entity_id} {journal_type} {reference_number}: imbalance {residual} {fc}"
                 )
-            idx = max(range(len(lines)), key=lambda i: abs(functional[i]))
+            # Explicitly specified functional amounts (e.g. AR/AP control lines that the subledger
+            # tracks) are authoritative: the rounding residual goes to the largest COMPUTED line.
+            computed = [i for i, ln in enumerate(lines) if ln.functional is None] or list(range(len(lines)))
+            idx = max(computed, key=lambda i: abs(functional[i]))
             functional[idx] += residual
         assert sum(functional, ZERO) == 0
 
         journal_id = ctx.ids.next("journal")
         header = {
-            "journal_id": journal_id, "entity_id": entity_id, "journal_type": journal_type,
-            "posting_date": posting_date, "transaction_date": transaction_date or posting_date,
-            "fiscal_period": period_of(posting_date), "source_system": source_system,
-            "source_document_type": source_document_type, "source_document_id": source_document_id,
-            "reference_number": reference_number, "description": description,
-            "posting_status": posting_status, "reversal_of_journal_id": reversal_of,
-            "created_by": created_by, "created_at": created_at, "updated_at": created_at,
+            "journal_id": journal_id,
+            "entity_id": entity_id,
+            "journal_type": journal_type,
+            "posting_date": posting_date,
+            "transaction_date": transaction_date or posting_date,
+            "fiscal_period": period_of(posting_date),
+            "source_system": source_system,
+            "source_document_type": source_document_type,
+            "source_document_id": source_document_id,
+            "reference_number": reference_number,
+            "description": description,
+            "posting_status": posting_status,
+            "reversal_of_journal_id": reversal_of,
+            "created_by": created_by,
+            "created_at": created_at,
+            "updated_at": created_at,
         }
         ctx.sink.emit("erp.journal_headers", header)
         for n, (ln, f, r) in enumerate(zip(lines, functional, rates, strict=True), start=1):
             account_id = ctx.coa.account_for(entity_id, ln.group_code, ln.account_variant)
             cc = ln.cost_center_id
-            ctx.sink.emit("erp.journal_lines", {
-                "journal_line_id": ctx.ids.next("journal_line"), "journal_id": journal_id, "line_number": n,
-                "account_id": account_id, "debit_amount": f if f > 0 else ZERO,
-                "credit_amount": -f if f < 0 else ZERO, "transaction_currency": ln.currency,
-                "transaction_amount": round_money(ln.amount, ln.currency), "functional_currency": fc,
-                "functional_currency_amount": f, "exchange_rate": r, "cost_center_id": cc,
-                "profit_center_id": ln.profit_center_id,
-                "department_id": ctx.org.cost_center_department.get(cc) if cc else None,
-                "counterparty_entity_id": ln.counterparty_entity_id, "line_description": ln.description,
-                "created_at": created_at, "updated_at": created_at,
-            })
+            ctx.sink.emit(
+                "erp.journal_lines",
+                {
+                    "journal_line_id": ctx.ids.next("journal_line"),
+                    "journal_id": journal_id,
+                    "line_number": n,
+                    "account_id": account_id,
+                    "debit_amount": f if f > 0 else ZERO,
+                    "credit_amount": -f if f < 0 else ZERO,
+                    "transaction_currency": ln.currency,
+                    "transaction_amount": round_money(ln.amount, ln.currency),
+                    "functional_currency": fc,
+                    "functional_currency_amount": f,
+                    "exchange_rate": r,
+                    "cost_center_id": cc,
+                    "profit_center_id": ln.profit_center_id,
+                    "department_id": ctx.org.cost_center_department.get(cc) if cc else None,
+                    "counterparty_entity_id": ln.counterparty_entity_id,
+                    "line_description": ln.description,
+                    "created_at": created_at,
+                    "updated_at": created_at,
+                },
+            )
             if posting_status == "POSTED":
                 self.balances[(entity_id, ln.group_code)] += f
                 if ln.group_code[0] in "456789":

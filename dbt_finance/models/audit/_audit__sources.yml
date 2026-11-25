@@ -1,0 +1,14 @@
+version: 2
+sources:
+  - name: pipeline_audit
+    schema: finance_audit
+    description: Operational metadata written by the ingestion framework, raw loader and dbt hooks.
+    tables:
+      - name: ingestion_batches
+        description: One row per extraction batch (copied from the ingestion metadata store).
+      - name: ingestion_file_registry
+        description: Every received source file with checksum, status and quarantine counts.
+      - name: raw_load_history
+        description: One row per manifest loaded into the raw layer (COPY INTO load history equivalent).
+      - name: audit_dbt_node_results
+        description: dbt node results persisted by the on-run-end hook.

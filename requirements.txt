@@ -1,0 +1,19 @@
+# Runtime (versions verified together on Python 3.12 - see IMPLEMENTATION_PLAN.md)
+duckdb==2.0.1
+dbt-core==1.12.7
+dbt-duckdb==1.11.1
+pandas==3.1.1
+pyarrow==26.0.1
+psycopg[binary]==3.3.9
+boto3==1.44.10
+requests==2.34.2
+pyyaml==6.0.4
+openpyxl==3.1.5
+streamlit==1.67.0
+plotly==7.1.0
+# Development and CI
+pytest==9.2.0
+pytest-cov==7.1.0
+ruff==0.17.6
+mypy==2.4.1
+sqlfluff==4.5.0
