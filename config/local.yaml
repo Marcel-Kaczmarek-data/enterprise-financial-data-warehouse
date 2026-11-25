@@ -1,0 +1,87 @@
+# Local (fully offline) environment configuration.
+# Values of the form ${VAR:-default} are resolved from the environment (see finance_common/config.py).
+environment: local
+
+paths:
+  generated_data: ${FDW_GENERATED_DIR:-sample_data/generated}
+  source_drop: ${FDW_SOURCE_DROP_DIR:-sample_data/source_drop}   # file-based source systems write here
+  local_object_store: ${FDW_LOCAL_OBJECT_STORE:-.local/object_store}
+  warehouse_db: ${FDW_WAREHOUSE_PATH:-warehouse/local/finance.duckdb}
+  published_db: ${FDW_PUBLISHED_PATH:-warehouse/local/published/finance_published.duckdb}
+  download_cache: ${FDW_DOWNLOAD_CACHE:-.local/download_cache}
+
+source_postgres:
+  host: ${FDW_PG_HOST:-localhost}
+  port: ${FDW_PG_PORT:-5434}
+  database: ${FDW_PG_DATABASE:-erp}
+  user: ${FDW_PG_USER:-finance}
+  password: ${FDW_PG_PASSWORD:-finance_local_only}
+
+metadata_db:
+  # Persistent ingestion state (watermarks, batches, file registry).
+  # backend: postgres (docker) | sqlite (no-docker fallback, used by unit tests)
+  backend: ${FDW_METADATA_BACKEND:-postgres}
+  sqlite_path: ${FDW_METADATA_SQLITE:-.local/ingestion_metadata.sqlite}
+  schema: ingestion_meta
+
+object_store:
+  # backend: s3 (MinIO locally, AWS S3 in cloud) | filesystem (no-docker fallback)
+  backend: ${FDW_OBJECT_STORE_BACKEND:-s3}
+  bucket: ${FDW_BUCKET:-finance-data-lake}
+  endpoint_url: ${FDW_S3_ENDPOINT:-http://localhost:9100}
+  region: ${AWS_REGION:-eu-central-1}
+  access_key: ${FDW_S3_ACCESS_KEY:-finance_minio}
+  secret_key: ${FDW_S3_SECRET_KEY:-finance_minio_local_only}
+
+crm_api:
+  base_url: ${FDW_CRM_API_URL:-http://localhost:8085}
+  page_size: 500
+  timeout_seconds: 30
+  max_retries: 5
+
+generator:
+  seed: 20250101
+  start_date: "2021-01-01"
+  end_date: "2025-12-31"
+  # Initial source cutoff: the source systems are seeded "as of" this timestamp; later records
+  # are applied by `make advance-source` to demonstrate incremental extraction.
+  default_profile: development
+  profiles:
+    # "transactions" = source business documents (invoices, vendor invoices, payments, bank
+    # transactions, payroll lines, ...). GL journal lines are reported separately in benchmarks.
+    small:
+      target_transactions: 10000
+      customers: 600
+      vendors: 200
+      employees: 300
+      sales_invoices_per_month: 45
+    development:
+      target_transactions: 100000
+      customers: 5000
+      vendors: 1500
+      employees: 1500
+      sales_invoices_per_month: 520
+    medium:
+      target_transactions: 1000000
+      customers: 50000
+      vendors: 10000
+      employees: 5000
+      sales_invoices_per_month: 5600
+    large:
+      target_transactions: 10000000
+      customers: 100000
+      vendors: 20000
+      employees: 10000
+      sales_invoices_per_month: 58000
+    benchmark:
+      target_transactions: 50000000
+      customers: 100000
+      vendors: 20000
+      employees: 10000
+      sales_invoices_per_month: 290000
+
+  org:
+    departments: 25
+    cost_centers: 100
+    profit_centers: 30
+    gl_accounts_target: 500

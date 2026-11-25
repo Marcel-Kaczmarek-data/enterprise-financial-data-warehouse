@@ -1,0 +1,105 @@
+# Financial rules used consistently by the generator, the ingestion layer, dbt (via vars) and tests.
+# These policies are ILLUSTRATIVE. They are not a complete implementation of IFRS or US GAAP.
+rule_version: "2025.1"
+
+reporting:
+  group_reporting_currency: EUR
+  group_parent_entity_id: E01
+  # Sign convention: all stored ledger amounts are debit-positive (signed = debit - credit).
+  # Presentation flips credit-normal lines (revenue, liabilities, equity) so they display positive.
+  signed_amount_convention: debit_positive
+
+exchange_rates:
+  # Convention: exchange_rate = units of TARGET currency per ONE unit of SOURCE currency.
+  # Provider publishes EUR-based rates (source_currency = EUR). Cross rates are triangulated via EUR.
+  convention: target_per_source
+  base_currency: EUR
+  rate_precision: 10          # decimal places kept for derived (inverse/cross) rates
+  published_precision: 6      # decimal places of published provider rates
+  max_spot_lookback_days: 5   # weekends/holidays: use most recent published spot within N days
+  missing_rate_policy: quarantine   # never default to 1.0 unless source == target
+  translation:
+    income_statement: MONTH_AVG       # period-average rate of the posting month
+    balance_sheet_monetary: MONTH_END # closing rate of the reporting period
+    balance_sheet_non_monetary: MONTH_END
+    equity_share_capital: HISTORICAL  # rate at entity opening date
+    retained_earnings_opening: HISTORICAL
+    # Currency translation adjustment (CTA) = balancing figure of the translated trial balance.
+
+rounding:
+  mode: ROUND_HALF_UP
+  default_minor_units: 2
+  minor_units:
+    JPY: 0
+  # After converting a multi-line journal, any residual rounding difference is assigned to the
+  # largest line; residual > max_residual_per_line * line_count is an error (journal rejected).
+  max_residual_per_line: "0.01"
+  journal_balance_tolerance: "0.00"     # posted journals must balance exactly in functional currency
+  reconciliation_tolerance: "0.01"      # subledger vs GL tolerance (functional currency)
+  intercompany_tolerance_pct: "0.5"     # IC mismatch tolerance in group currency, percent of amount
+
+vat_rates:          # simulated standard rates, percent
+  NL: "21"
+  DE: "19"
+  FR: "20"
+  IE: "23"
+  GB: "20"
+  CH: "8.1"
+  SE: "25"
+  US: "0"           # US sales tax is not modeled (simplification)
+  CA: "5"
+  JP: "10"
+  SG: "9"
+  IN: "18"
+
+employer_contribution_rates:   # percent of gross salary (simulated)
+  NL: "19"
+  DE: "20"
+  FR: "42"
+  IE: "11"
+  GB: "13.8"
+  CH: "12"
+  SE: "31.4"
+  US: "7.65"
+  CA: "7.5"
+  JP: "15"
+  SG: "17"
+  IN: "12"
+
+employee_withholding_rate: "25"   # percent of gross, simulated flat rate
+income_tax_rate: "22"             # percent of positive quarterly pre-tax profit, simulated
+
+receivables:
+  aging_buckets:        # days overdue (inclusive bounds); "not_due" when as_of_date <= due_date
+    - { name: "Not due", min: null, max: 0 }
+    - { name: "1-30", min: 1, max: 30 }
+    - { name: "31-60", min: 31, max: 60 }
+    - { name: "61-90", min: 61, max: 90 }
+    - { name: "91-120", min: 91, max: 120 }
+    - { name: "120+", min: 121, max: null }
+
+bank_reconciliation:
+  date_tolerance_days: 3
+  amount_tolerance: "0.00"
+  auto_approve_ambiguous: false
+
+three_way_match:
+  price_tolerance_pct: "2.0"
+  quantity_tolerance_pct: "0.0"
+
+fixed_assets:
+  depreciation_method: straight_line
+  convention: full_month_following_acquisition
+
+cash_flow:
+  method: direct
+  interest_paid_classification: operating     # operating | financing
+  interest_received_classification: operating # operating | investing
+
+period_close:
+  statuses: [OPEN, SOFT_CLOSED, CLOSED, REOPENED]
+  allowed_transitions:
+    OPEN: [SOFT_CLOSED]
+    SOFT_CLOSED: [OPEN, CLOSED]
+    CLOSED: [REOPENED]
+    REOPENED: [SOFT_CLOSED, CLOSED]

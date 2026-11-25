@@ -1,0 +1,103 @@
+# Local, credential-free environment. Core services: source PostgreSQL + S3-compatible object store.
+#   docker compose up -d                     -> core services
+#   docker compose --profile app up -d       -> + CRM API and Streamlit dashboard
+#   docker compose --profile orchestration up -d -> + Airflow (scheduler, webserver, metadata DB)
+#
+# Object storage: MinIO's community images are no longer pullable from public registries in this
+# environment, so the default S3-compatible store is SeaweedFS (S3 gateway on :9000). All code uses
+# boto3 against FDW_S3_ENDPOINT, so MinIO or AWS S3 can be substituted without code changes.
+name: enterprise-financial-dw
+
+x-pg-env: &pg-env
+  POSTGRES_USER: ${FDW_PG_USER:-finance}
+  POSTGRES_PASSWORD: ${FDW_PG_PASSWORD:-finance_local_only}
+
+services:
+  source-postgres:
+    image: postgres:16-alpine
+    container_name: fdw-source-postgres
+    environment:
+      <<: *pg-env
+      POSTGRES_DB: ${FDW_PG_DATABASE:-erp}
+    ports: ["${FDW_PG_PORT:-5434}:5432"]
+    volumes:
+      - source_pg_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  object-store:
+    image: chrislusf/seaweedfs:latest
+    container_name: fdw-object-store
+    command: "server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=256 -volume.max=50"
+    ports: ["${FDW_S3_PORT:-9100}:9000"]
+    volumes:
+      - object_store_data:/data
+      - ./infrastructure/docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9000/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  crm-api:
+    profiles: ["app"]
+    build: { context: ., dockerfile: infrastructure/docker/python.Dockerfile }
+    container_name: fdw-crm-api
+    command: ["python", "-m", "source_systems.crm.api", "--host", "0.0.0.0", "--port", "8085"]
+    environment:
+      FDW_CRM_DATA_DIR: /app/sample_data/source_drop/crm
+    volumes: ["./sample_data:/app/sample_data:ro"]
+    ports: ["8085:8085"]
+
+  dashboard:
+    profiles: ["app"]
+    build: { context: ., dockerfile: infrastructure/docker/python.Dockerfile }
+    container_name: fdw-dashboard
+    command: ["streamlit", "run", "dashboards/streamlit/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]
+    environment:
+      FDW_PUBLISHED_PATH: /app/warehouse/local/published/finance_published.duckdb
+    volumes: ["./warehouse/local/published:/app/warehouse/local/published:ro"]
+    ports: ["8501:8501"]
+
+  airflow-postgres:
+    profiles: ["orchestration"]
+    image: postgres:16-alpine
+    container_name: fdw-airflow-postgres
+    environment:
+      <<: *pg-env
+      POSTGRES_DB: airflow
+    volumes: [airflow_pg_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d airflow"]
+      interval: 5s
+      retries: 20
+
+  airflow:
+    profiles: ["orchestration"]
+    build: { context: ., dockerfile: infrastructure/docker/airflow.Dockerfile }
+    container_name: fdw-airflow
+    command: ["standalone"]
+    depends_on:
+      airflow-postgres: { condition: service_healthy }
+      source-postgres: { condition: service_healthy }
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${FDW_PG_USER:-finance}:${FDW_PG_PASSWORD:-finance_local_only}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/project/orchestration/dags
+      FDW_PROJECT_ROOT: /opt/project
+      FDW_PG_HOST: source-postgres
+      FDW_PG_PORT: "5432"
+      FDW_S3_ENDPOINT: http://object-store:9000
+    volumes: [".:/opt/project"]
+    ports: ["${FDW_AIRFLOW_PORT:-8088}:8080"]
+
+volumes:
+  source_pg_data:
+  object_store_data:
+  airflow_pg_data:

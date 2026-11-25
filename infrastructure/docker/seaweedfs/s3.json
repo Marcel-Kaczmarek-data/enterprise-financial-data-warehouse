@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "finance_pipeline",
+      "credentials": [
+        { "accessKey": "finance_minio", "secretKey": "finance_minio_local_only" }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}
